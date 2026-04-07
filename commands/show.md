@@ -20,7 +20,7 @@ Launch the Claude Config Dashboard web server and open it in the browser.
 
 3. Start the server in the background using the path found in step 1:
    ```bash
-   python3 "<path from step 1>" &
+   python3 "<path from step 1>" --no-open &
    ```
    Wait 1 second for it to start.
 
