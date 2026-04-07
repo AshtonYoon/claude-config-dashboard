@@ -28,6 +28,9 @@ CWD_CLAUDE = _cwd_path if (_cwd_path.is_dir() and _cwd_path.resolve() != HOME_CL
 CLAUDE_DIR = HOME_CLAUDE  # mutable global used by collectors; set before each collection
 PORT_DEFAULT = 9876
 
+# Claude character mascot image — served at /character
+_CHARACTER_IMG = Path(__file__).parent / "character.png"
+
 
 # ─── Project / Session Mapping ────────────────────────────────────────────────
 
@@ -687,7 +690,7 @@ def render_commands(commands: list) -> str:
     for c in commands:
         slash = _e(c["slash"])
         desc = _e(c.get("description", ""))
-        link = _open_link(f'<span style="font-family:monospace;color:var(--al)">{slash}</span>', c["path"])
+        link = _open_link(f'<span style="font-family:monospace;color:var(--brand)">{slash}</span>', c["path"])
         rows.append(f'<tr><td class="whitespace-nowrap">{link}</td>'
                     f'<td style="color:var(--text-s)">{desc}</td></tr>')
     return "".join(rows)
@@ -804,10 +807,10 @@ def render_cleanup(agents: list, skills: list, mcp_servers: list) -> str:
   </div>
 </div>"""
 
-    summary = f"""<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
+    summary = f"""<div style="background:rgba(201,100,66,.07);border:1px solid rgba(201,100,66,.18);border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
   <div>
-    <p style="font-weight:600;color:#92400e;font-size:14px">{total} items haven&#39;t been used in the last {STALE_DAYS} days</p>
-    <p style="font-size:12px;color:#b45309;margin-top:2px">Review these to keep your .claude lean</p>
+    <p style="font-weight:500;color:#c96442;font-size:14px">{total} items haven&#39;t been used in the last {STALE_DAYS} days</p>
+    <p style="font-size:12px;color:#87867f;margin-top:2px">Review these to keep your .claude lean</p>
   </div>
 </div>"""
 
@@ -837,110 +840,142 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   :root {{
-    --ab: #0071e3; --al: #0066cc;
-    --surface: #f5f5f7; --text-p: #1d1d1f;
-    --text-s: rgba(0,0,0,.56); --text-t: rgba(0,0,0,.40);
-    --shadow: rgba(0,0,0,.10) 0 2px 16px 0;
-    --shadow-h: rgba(0,0,0,.16) 0 4px 24px 0;
+    --brand: #c96442; --brand-coral: #d97757;
+    --bg: #f5f4ed; --surface: #faf9f5; --surface-white: #ffffff;
+    --text-p: #141413; --text-s: #5e5d59; --text-t: #87867f;
+    --border: #f0eee6; --border-warm: #e8e6dc;
+    --dark-bg: #141413; --dark-surface: #30302e;
+    --warm-sand: #e8e6dc;
+    --shadow: rgba(0,0,0,.05) 0px 4px 24px;
+    --shadow-ring: #e8e6dc 0px 0px 0px 0px, #d1cfc5 0px 0px 0px 1px;
   }}
   * {{ box-sizing: border-box; }}
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 15px; line-height: 1.47; letter-spacing: -0.02em;
-    background: var(--surface); color: var(--text-p); margin: 0;
+    font-family: system-ui, -apple-system, Arial, sans-serif;
+    font-size: 15px; line-height: 1.60;
+    background: var(--bg); color: var(--text-p); margin: 0;
   }}
   .nav {{
     position: sticky; top: 0; z-index: 50; height: 72px;
-    background: rgba(22,22,23,.9);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    background: rgba(250, 249, 245, 0.80);
+    backdrop-filter: saturate(160%) blur(18px);
+    -webkit-backdrop-filter: saturate(160%) blur(18px);
+    border-bottom: 1px solid var(--border);
     display: flex; align-items: center; padding: 0 24px; gap: 20px;
   }}
   .nav-brand {{ flex: 0 0 auto; }}
-  .nav-title {{ font-size: 15px; font-weight: 600; color: #fff; letter-spacing: -0.022em; }}
-  .nav-sub {{ font-size: 11px; color: rgba(255,255,255,.42); margin-top: 1px; }}
+  .nav-title {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 16px; font-weight: 500; color: var(--text-p); letter-spacing: normal; line-height: 1.20;
+  }}
+  .nav-sub {{ font-size: 11px; color: var(--text-t); margin-top: 2px; }}
   .nav-stat {{ text-align: center; }}
-  .nav-stat-n {{ font-size: 19px; font-weight: 700; color: #fff; line-height: 1.1; letter-spacing: -0.03em; }}
-  .nav-stat-l {{ font-size: 10px; color: rgba(255,255,255,.42); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }}
-  .nav-stat-w {{ font-size: 9px; color: rgba(255,100,100,.9); }}
+  .nav-stat-n {{ font-size: 18px; font-weight: 500; color: var(--text-p); line-height: 1.1; font-family: Georgia, serif; }}
+  .nav-stat-l {{ font-size: 10px; color: var(--text-t); font-weight: 400; text-transform: uppercase; letter-spacing: .05em; }}
+  .nav-stat-w {{ font-size: 9px; color: #b53333; }}
   .dir-select {{
-    font-size: 12px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.85);
-    border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 3px 8px; outline: none;
+    font-size: 12px; background: var(--surface); color: var(--text-s);
+    border: 1px solid var(--border-warm); border-radius: 8px; padding: 3px 8px; outline: none;
   }}
-  .dir-select option {{ background: #1d1d1f; color: #fff; }}
+  .dir-select option {{ background: var(--surface); color: var(--text-p); }}
   .stop-btn {{
-    font-size: 12px; padding: 4px 14px; border-radius: 980px;
-    border: none; color: #fff;
-    background: #c0392b; cursor: pointer; transition: all .15s; white-space: nowrap;
-    font-weight: 500;
+    font-size: 12px; padding: 5px 14px; border-radius: 8px;
+    border: 1px solid var(--border-warm); color: var(--text-s);
+    background: var(--surface); cursor: pointer; transition: all .15s; white-space: nowrap;
+    font-weight: 400;
   }}
-  .stop-btn:hover {{ background: #e74c3c; }}
+  .stop-btn:hover {{ background: var(--border-warm); color: var(--text-p); }}
   .tab-bar {{
-    background: #fff; border-bottom: 1px solid rgba(0,0,0,.06);
+    background: var(--surface); border-bottom: 1px solid var(--border);
     padding: 8px 24px; display: flex; gap: 4px; flex-wrap: wrap;
   }}
   .tab-btn {{
-    font-size: 13px; font-weight: 500; letter-spacing: -0.01em; color: var(--text-s);
-    border-radius: 980px; padding: 5px 14px; border: none; background: transparent; cursor: pointer; transition: all .15s;
+    font-size: 13px; font-weight: 400; color: var(--text-s);
+    border-radius: 8px; padding: 5px 14px; border: none; background: transparent; cursor: pointer; transition: all .15s;
   }}
-  .tab-btn:hover:not(.active) {{ background: rgba(0,0,0,.06); color: var(--text-p); }}
-  .tab-btn.active {{ background: var(--text-p); color: #fff; }}
+  .tab-btn:hover:not(.active) {{ background: var(--border-warm); color: var(--text-p); }}
+  .tab-btn.active {{ background: var(--brand); color: #faf9f5; }}
   .tab-content {{ display: none; }}
   .tab-content.active {{ display: block; }}
   .content {{ padding: 24px; max-width: 1040px; margin: 0 auto; }}
   .card {{
-    background: #fff; border-radius: 8px; padding: 16px;
-    box-shadow: var(--shadow); border: none; transition: box-shadow .2s;
+    background: var(--surface); border-radius: 8px; padding: 16px;
+    box-shadow: var(--shadow); border: 1px solid var(--border); transition: box-shadow .2s;
   }}
-  .card:hover {{ box-shadow: var(--shadow-h); }}
+  .card:hover {{ box-shadow: var(--shadow-ring); }}
   .badge {{
     display: inline-block; padding: 1px 8px; border-radius: 980px;
-    font-size: 11px; font-weight: 600; letter-spacing: -.01em;
+    font-size: 11px; font-weight: 500; letter-spacing: .01em;
   }}
-  .al {{ color: var(--al); text-decoration: none; cursor: pointer; }}
-  .al:hover {{ text-decoration: underline; }}
-  .badge-blue {{ background: rgba(0,113,227,.10); color: var(--ab); }}
-  .badge-green {{ background: #d1fae5; color: #065f46; }}
-  .badge-gray {{ background: rgba(0,0,0,.06); color: rgba(0,0,0,.48); }}
-  .badge-red {{ background: #fee2e2; color: #991b1b; }}
-  .badge-amber {{ background: #fef3c7; color: #92400e; }}
-  .source-custom {{ background: #d1fae5; color: #065f46; }}
-  .source-plugin {{ background: rgba(0,113,227,.10); color: var(--ab); }}
-  .source-symlink {{ background: #fef3c7; color: #92400e; }}
-  .stale-recent {{ background: #d1fae5; color: #065f46; }}
-  .stale-mid    {{ background: #fef9c3; color: #92400e; }}
-  .stale-old    {{ background: #fee2e2; color: #991b1b; }}
-  .stale-never  {{ background: #fee2e2; color: #991b1b; font-weight: 700; }}
-  .usage-count  {{ background: rgba(0,113,227,.10); color: var(--ab); }}
+  .al {{ color: var(--brand); text-decoration: none; cursor: pointer; }}
+  .al:hover {{ text-decoration: underline; color: var(--brand-coral); }}
+  .badge-blue {{ background: rgba(201,100,66,.10); color: var(--brand); }}
+  .badge-green {{ background: rgba(0,0,0,.05); color: #3d6b4e; border: 1px solid rgba(0,0,0,.06); }}
+  .badge-gray {{ background: rgba(0,0,0,.04); color: var(--text-s); border: 1px solid var(--border-warm); }}
+  .badge-red {{ background: rgba(181,51,51,.08); color: #b53333; }}
+  .badge-amber {{ background: rgba(146,64,14,.08); color: #92400e; }}
+  .source-custom {{ background: rgba(0,0,0,.05); color: #3d6b4e; border: 1px solid rgba(0,0,0,.06); }}
+  .source-plugin {{ background: rgba(201,100,66,.10); color: var(--brand); }}
+  .source-symlink {{ background: rgba(146,64,14,.08); color: #92400e; }}
+  .stale-recent {{ background: rgba(0,0,0,.04); color: #3d6b4e; border: 1px solid rgba(0,0,0,.06); }}
+  .stale-mid    {{ background: rgba(146,64,14,.08); color: #92400e; }}
+  .stale-old    {{ background: rgba(181,51,51,.08); color: #b53333; }}
+  .stale-never  {{ background: rgba(181,51,51,.08); color: #b53333; font-weight: 600; }}
+  .usage-count  {{ background: rgba(201,100,66,.10); color: var(--brand); }}
   .sort-bar {{ display: flex; align-items: center; gap: 4px; }}
   .sort-btn {{
-    padding: 2px 12px; border-radius: 980px; font-size: 12px; font-weight: 500;
-    border: 1px solid rgba(0,0,0,.12); background: #fff; color: var(--text-s);
+    padding: 2px 12px; border-radius: 8px; font-size: 12px; font-weight: 400;
+    border: 1px solid var(--border-warm); background: var(--surface); color: var(--text-s);
     cursor: pointer; transition: all .15s;
+    box-shadow: var(--warm-sand) 0px 0px 0px 0px, #d1cfc5 0px 0px 0px 1px;
   }}
-  .sort-btn:hover {{ color: var(--ab); border-color: var(--ab); }}
-  .sort-btn.active {{ background: var(--ab); color: #fff; border-color: var(--ab); }}
-  .at {{ border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }}
+  .sort-btn:hover {{ color: var(--brand); border-color: var(--brand); }}
+  .sort-btn.active {{ background: var(--dark-bg); color: #faf9f5; border-color: var(--dark-bg); }}
+  .at {{ border-collapse: collapse; width: 100%; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); }}
   .at th {{
-    font-size: 11px; font-weight: 600; color: var(--text-t); text-transform: uppercase;
+    font-size: 10px; font-weight: 500; color: var(--text-t); text-transform: uppercase;
     letter-spacing: .07em; padding: 10px 16px; text-align: left;
-    background: rgba(0,0,0,.02); border-bottom: 1px solid rgba(0,0,0,.06);
+    background: rgba(0,0,0,.01); border-bottom: 1px solid var(--border);
   }}
-  .at td {{ padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,.05); font-size: 13px; vertical-align: middle; }}
+  .at td {{ padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; color: var(--text-p); }}
   .at tbody tr:last-child td {{ border-bottom: none; }}
-  .at tbody tr:hover {{ background: rgba(0,0,0,.02); }}
+  .at tbody tr:hover {{ background: var(--bg); }}
   details summary {{ cursor: pointer; list-style: none; }}
   details summary::before {{ content: "▶"; margin-right: 6px; font-size: 9px; color: var(--text-t); transition: transform .2s; display: inline-block; }}
   details[open] summary::before {{ transform: rotate(90deg); }}
   a {{ cursor: pointer; }}
+
+  /* ── Floating character ── */
+  .float-layer {{
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 0; overflow: hidden;
+  }}
+  .fc {{
+    position: absolute;
+    image-rendering: pixelated;
+    opacity: 0;
+    mix-blend-mode: multiply;
+    animation: fcFloat linear infinite;
+    will-change: transform, opacity;
+  }}
+  @keyframes fcFloat {{
+    0%   {{ opacity: 0; transform: translateY(0)   rotate(-3deg); }}
+    8%   {{ opacity: 1; }}
+    45%  {{ transform: translateY(-22px) rotate(2deg); }}
+    55%  {{ transform: translateY(-18px) rotate(-1deg); }}
+    92%  {{ opacity: 1; }}
+    100% {{ opacity: 0; transform: translateY(4px)  rotate(-3deg); }}
+  }}
 </style>
 </head>
 <body>
 
+<div class="float-layer" id="float-layer"></div>
+
 <nav class="nav">
   <div class="nav-brand">
     <div class="nav-title">Claude Config Dashboard</div>
-    <div class="nav-sub">{_e(dir_label)} · {now}</div>
+    <div class="nav-sub">{_e(dir_label)} &middot; {now}</div>
   </div>
   <div style="flex:1"></div>
   <div style="display:flex;gap:20px;align-items:center">
@@ -964,7 +999,7 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 
 <div id="tab-agents" class="tab-content">
   <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">{len(ag)} agents · {n_cats} categories · Click name to open
-  {f' · <span style="color:#c0392b;font-weight:500">{agents_never} never used</span>' if agents_never else ''}
+  {f' · <span style="color:#b53333;font-weight:500">{agents_never} never used</span>' if agents_never else ''}
   </p>
   {render_agents(ag)}
 </div>
@@ -1004,6 +1039,36 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 </div>
 
 <script>
+// ── Floating characters ──────────────────────────────────────────
+(function() {{
+  const layer = document.getElementById('float-layer');
+  if (!layer) return;
+  const HAS_CHAR = {str(_CHARACTER_IMG.exists()).lower()};
+  if (!HAS_CHAR) return;
+
+  const spots = [
+    {{l:4,  t:18, s:52, dur:13, delay:0}},
+    {{l:80, t:30, s:44, dur:10, delay:3}},
+    {{l:18, t:62, s:48, dur:15, delay:7}},
+    {{l:65, t:72, s:40, dur:11, delay:2}},
+    {{l:88, t:55, s:56, dur:14, delay:9}},
+    {{l:42, t:88, s:36, dur:12, delay:5}},
+    {{l:55, t:10, s:42, dur:16, delay:1}},
+  ];
+
+  spots.forEach(function(sp) {{
+    const img = document.createElement('img');
+    img.src = '/character?v=' + Date.now();
+    img.className = 'fc';
+    img.style.left = sp.l + '%';
+    img.style.top  = sp.t + '%';
+    img.style.width = sp.s + 'px';
+    img.style.animationDuration = sp.dur + 's';
+    img.style.animationDelay = sp.delay + 's';
+    layer.appendChild(img);
+  }});
+}})();
+
 function showTab(name) {{
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -1064,7 +1129,19 @@ def make_handler(all_data: dict, server_ref: list):
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
 
-            if parsed.path == "/open":
+            if parsed.path == "/character":
+                if _CHARACTER_IMG.exists():
+                    img_data = _CHARACTER_IMG.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/png")
+                    self.send_header("Cache-Control", "no-cache, no-store")
+                    self.send_header("Content-Length", str(len(img_data)))
+                    self.end_headers()
+                    self.wfile.write(img_data)
+                else:
+                    self._respond(404, b"not found", "text/plain")
+
+            elif parsed.path == "/open":
                 qs = urllib.parse.parse_qs(parsed.query)
                 path = qs.get("path", [""])[0]
                 if path and Path(path).exists():
