@@ -22,7 +22,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-CLAUDE_DIR = Path.home() / ".claude"
+_cwd_claude = Path.cwd() / ".claude"
+CLAUDE_DIR = _cwd_claude if _cwd_claude.is_dir() else Path.home() / ".claude"
 PORT_DEFAULT = 9876
 
 
