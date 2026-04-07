@@ -1136,6 +1136,7 @@ def _scan_dir(claude_dir: Path) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Claude Config Dashboard")
     parser.add_argument("--port", type=int, default=PORT_DEFAULT)
+    parser.add_argument("--no-open", action="store_true", help="Do not auto-open browser")
     args = parser.parse_args()
 
     print(f"Scanning {HOME_CLAUDE} ...")
@@ -1169,7 +1170,8 @@ def main():
     print(f"Dashboard → {initial_url}")
     print("Click any filename to open in default app. Stop: Ctrl+C or the Stop button\n")
 
-    threading.Thread(target=lambda: __import__("webbrowser").open(initial_url), daemon=True).start()
+    if not args.no_open:
+        threading.Thread(target=lambda: __import__("webbrowser").open(initial_url), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
