@@ -1,0 +1,12 @@
+{
+  "name": "claude-config-dashboard",
+  "version": "1.0.0",
+  "description": "A local web dashboard for visualizing all third-party elements installed in ~/.claude — plugins, agents, skills, commands, hooks, and MCP servers.",
+  "homepage": "https://github.com/AshtonYoon/claude-config-dashboard",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AshtonYoon/claude-config-dashboard"
+  },
+  "author": "AshtonYoon",
+  "license": "MIT"
+}
