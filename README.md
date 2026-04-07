@@ -35,6 +35,19 @@ The dashboard opens at **http://localhost:9876**.
 
 Clicking any file name opens it in the OS default app (editor, Finder, etc.).
 
+## Update
+
+```
+/plugin update claude-config-dashboard
+/reload-plugins
+```
+
+> **If `/plugin update` shows a "browse plugins" prompt instead of updating directly**, the local marketplace cache is stale. Run this once to refresh it:
+> ```bash
+> cd ~/.claude/plugins/marketplaces/claude-config-dashboard && git pull
+> ```
+> Then retry `/plugin update claude-config-dashboard`.
+
 ## Requirements
 
 - Python 3.x (standard library only, no pip install needed)
