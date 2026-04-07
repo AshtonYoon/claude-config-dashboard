@@ -540,20 +540,20 @@ def _sort_bar(grid_id: str, default: str = "name") -> str:
 def _tab_btns() -> str:
     tabs = [("plugins", "Plugins"), ("agents", "Agents"), ("skills", "Skills"),
             ("commands", "Commands"), ("hooks", "Hooks"), ("mcp", "MCP Servers"),
-            ("rules", "Rules"), ("cleanup", "🧹 Cleanup")]
+            ("rules", "Rules"), ("cleanup", "Cleanup")]
     return "".join(
-        f'<button class="tab-btn px-4 py-1.5 rounded text-sm font-medium text-gray-600 hover:bg-gray-100"'
-        f' onclick="showTab(\'{t}\')" id="btn-{t}">{label}</button>'
+        f'<button class="tab-btn" onclick="showTab(\'{t}\')" id="btn-{t}">{label}</button>'
         for t, label in tabs
     )
 
 def _stats_header(items: list) -> str:
     parts = []
     for n, label, never in items:
-        unused_line = f'<div class="text-xs text-red-400">{never} unused</div>' if never else ""
+        unused_line = f'<div class="nav-stat-w">{never} unused</div>' if never else ""
         parts.append(
-            f'<div><div class="text-2xl font-bold text-indigo-600">{n}</div>'
-            f'<div class="text-xs text-gray-500">{label}</div>'
+            f'<div class="nav-stat">'
+            f'<div class="nav-stat-n">{n}</div>'
+            f'<div class="nav-stat-l">{label}</div>'
             f'{unused_line}</div>'
         )
     return "".join(parts)
@@ -569,8 +569,7 @@ def _dir_selector(selected_dir: str) -> str:
         f'<option value="cwd"{"  selected" if selected_dir == "cwd" else ""}>{_e(cwd_label)}</option>',
     ]
     return (
-        f'<select class="project-select text-sm border border-gray-200 rounded px-2 py-1 bg-white text-gray-700"'
-        f' onchange="window.location=\'/?dir=\'+this.value">'
+        f'<select class="dir-select" onchange="window.location=\'/?dir=\'+this.value">'
         + "".join(options) + "</select>"
     )
 
@@ -590,18 +589,18 @@ def render_plugins(plugins: list) -> str:
         rp = p.get("readme_path", "")
         usage_badge = _usage_html({"count": p.get("usage_count", 0), "last_used": p.get("last_used", "")})
 
-        ver_b = f'<span class="badge bg-indigo-100 text-indigo-700">{ver}</span>' if ver else ""
-        ena_b = ('<span class="badge bg-green-100 text-green-700">enabled</span>' if enabled
-                 else '<span class="badge bg-red-100 text-red-600">disabled</span>')
-        repo_a = (f'<a href="{_e(repo)}" target="_blank" class="text-xs text-indigo-500 hover:underline">'
+        ver_b = f'<span class="badge badge-blue">{ver}</span>' if ver else ""
+        ena_b = ('<span class="badge badge-green">enabled</span>' if enabled
+                 else '<span class="badge badge-red">disabled</span>')
+        repo_a = (f'<a href="{_e(repo)}" target="_blank" class="al" style="font-size:12px">'
                   f'{_e(repo.replace("https://github.com/", ""))}</a>') if repo else ""
-        title = (_open_link(f'<span class="font-semibold text-gray-900">{name}</span>', rp)
-                 if rp else f'<span class="font-semibold text-gray-900">{name}</span>')
+        title = (_open_link(f'<span style="font-weight:600;color:var(--text-p)">{name}</span>', rp)
+                 if rp else f'<span style="font-weight:600;color:var(--text-p)">{name}</span>')
         cards.append(f"""<div class="card">
   <div class="flex items-start justify-between mb-2">{title}<div class="flex gap-1 ml-2 flex-shrink-0">{ena_b}{ver_b}</div></div>
-  {f'<p class="text-xs text-gray-500 mb-2">{desc}</p>' if desc else ''}
-  <div class="flex items-center gap-2 flex-wrap">{repo_a}<span class="text-xs text-gray-400">@{mkt}</span></div>
-  {f'<p class="text-xs text-gray-400 mt-1">installed: {inst}</p>' if inst else ''}
+  {f'<p style="font-size:12px;color:var(--text-s);margin-bottom:8px">{desc}</p>' if desc else ''}
+  <div class="flex items-center gap-2 flex-wrap">{repo_a}<span style="font-size:11px;color:var(--text-t)">@{mkt}</span></div>
+  {f'<p style="font-size:11px;color:var(--text-t);margin-top:4px">installed: {inst}</p>' if inst else ''}
   {f'<div class="mt-2">{usage_badge}</div>' if usage_badge else ''}
 </div>""")
     return "".join(cards)
@@ -614,12 +613,12 @@ def render_agents(agents: list) -> str:
     parts = []
     for cat, items in sorted(cats.items()):
         rows = "".join(
-            f'<tr class="border-b hover:bg-gray-50" data-name="{_e(a["name"].lower())}" '
+            f'<tr data-name="{_e(a["name"].lower())}" '
             f'data-count="{a.get("usage_count", 0)}" data-last="{_e(a.get("last_used", ""))}">'
-            f'<td class="px-4 py-2 whitespace-nowrap">'
-            f'{_open_link(_e(a["name"]), a["path"], "font-medium text-indigo-700")}</td>'
-            f'<td class="px-4 py-2 text-xs text-gray-500">{_e(a["description"][:80])}</td>'
-            f'<td class="px-4 py-2 whitespace-nowrap">'
+            f'<td class="whitespace-nowrap">'
+            f'{_open_link(_e(a["name"]), a["path"], "al")}</td>'
+            f'<td style="color:var(--text-s)">{_e(a["description"][:80])}</td>'
+            f'<td class="whitespace-nowrap">'
             f'{_usage_html({"count": a.get("usage_count", 0), "last_used": a.get("last_used", "")})}</td>'
             f'</tr>'
             for a in items
@@ -627,19 +626,15 @@ def render_agents(agents: list) -> str:
         table_id = "agent-table-" + cat.replace(" ", "-").replace("&", "")
         parts.append(f"""<details class="mb-4" open>
   <summary class="flex items-center gap-2 py-2">
-    <span class="font-semibold text-gray-800">{_e(cat)}</span>
-    <span class="badge bg-indigo-100 text-indigo-600">{len(items)}</span>
+    <span style="font-weight:600;color:var(--text-p)">{_e(cat)}</span>
+    <span class="badge badge-blue">{len(items)}</span>
   </summary>
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden mt-2">
-    <table class="w-full text-sm" id="{table_id}">
-      <thead class="bg-gray-50 border-b">
-        <tr>
-          <th class="text-left px-4 py-2 font-semibold text-gray-600">Agent</th>
-          <th class="text-left px-4 py-2 font-semibold text-gray-600">Description</th>
-          <th class="text-left px-4 py-2 font-semibold text-gray-600 cursor-pointer hover:text-indigo-600"
-              onclick="sortTable('{table_id}')">Usage ↕</th>
-        </tr>
-      </thead>
+  <div style="border-radius:8px;overflow:hidden;margin-top:8px">
+    <table class="at" id="{table_id}">
+      <thead><tr>
+        <th>Agent</th><th>Description</th>
+        <th style="cursor:pointer" onclick="sortTable('{table_id}')">Usage ↕</th>
+      </tr></thead>
       <tbody>{rows}</tbody>
     </table>
   </div>
@@ -649,7 +644,7 @@ def render_agents(agents: list) -> str:
 
 def render_skills(skills: list) -> str:
     never_count = sum(1 for s in skills if not s.get("last_used", ""))
-    summary = f'<span class="text-xs text-red-500 font-medium">{never_count} never used</span>' if never_count else ""
+    summary = f'<span class="badge badge-red">{never_count} never used</span>' if never_count else ""
     sort_bar = _sort_bar("skills-grid")
     cards = []
     for s in skills:
@@ -671,18 +666,18 @@ def render_skills(skills: list) -> str:
             badge += ' <span class="badge source-symlink">symlink</span>'
 
         usage_badge = _usage_html({"count": count, "last_used": s.get("last_used", "")})
-        title = (_open_link(f'<span class="font-medium text-sm text-indigo-700">{name}</span>', path)
-                 if path else f'<span class="font-medium text-sm text-gray-900">{name}</span>')
+        title = (_open_link(f'<span style="font-weight:500;font-size:14px" class="al">{name}</span>', path)
+                 if path else f'<span style="font-weight:500;font-size:14px;color:var(--text-p)">{name}</span>')
+        desc_html = f'<p style="font-size:12px;color:var(--text-s)">{desc}</p>' if desc else ""
+        usage_html = f'<div style="margin-top:8px">{usage_badge}</div>' if usage_badge else ""
         cards.append(
             f'<div class="card skill-item" data-name="{_e(s["name"].lower())}" '
             f'data-count="{count}" data-last="{last_iso}">'
             f'<div class="flex items-start justify-between mb-1">{title}'
             f'<div class="flex gap-1 ml-2">{badge}</div></div>'
-            f'{f"<p class=text-xs text-gray-500>{desc}</p>" if desc else ""}'
-            f'{f"<div class=mt-2>{usage_badge}</div>" if usage_badge else ""}'
-            f'</div>'
+            f'{desc_html}{usage_html}</div>'
         )
-    header = f'<div class="flex items-center justify-between mb-2">{sort_bar}{summary}</div>'
+    header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>'
     return f'{header}<div id="skills-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">{"".join(cards)}</div>'
 
 
@@ -691,32 +686,32 @@ def render_commands(commands: list) -> str:
     for c in commands:
         slash = _e(c["slash"])
         desc = _e(c.get("description", ""))
-        link = _open_link(f'<span class="font-mono text-indigo-600">{slash}</span>', c["path"])
-        rows.append(f'<tr class="border-b hover:bg-gray-50"><td class="px-4 py-2 whitespace-nowrap">{link}</td>'
-                    f'<td class="px-4 py-2 text-gray-600 text-sm">{desc}</td></tr>')
+        link = _open_link(f'<span style="font-family:monospace;color:var(--al)">{slash}</span>', c["path"])
+        rows.append(f'<tr><td class="whitespace-nowrap">{link}</td>'
+                    f'<td style="color:var(--text-s)">{desc}</td></tr>')
     return "".join(rows)
 
 
 def render_hooks(hooks: list) -> str:
     colors = {
-        "PreToolUse": "bg-yellow-100 text-yellow-800",
-        "PostToolUse": "bg-blue-100 text-blue-800",
-        "Stop": "bg-red-100 text-red-700",
-        "SubagentStop": "bg-orange-100 text-orange-700",
-        "UserPromptSubmit": "bg-green-100 text-green-800",
-        "PreCompact": "bg-purple-100 text-purple-700",
-        "SessionStart": "bg-teal-100 text-teal-700",
+        "PreToolUse":       "badge-amber",
+        "PostToolUse":      "badge-blue",
+        "Stop":             "badge-red",
+        "SubagentStop":     "badge-red",
+        "UserPromptSubmit": "badge-green",
+        "PreCompact":       "badge-gray",
+        "SessionStart":     "badge-green",
     }
     parts = []
     for h in hooks:
-        color = colors.get(h["trigger"], "bg-gray-100 text-gray-700")
+        color = colors.get(h["trigger"], "badge-gray")
         cmd_display = _e(h["command"])
-        cmd_html = (_open_link(f'<code class="text-xs text-gray-700 break-all">{cmd_display}</code>', h["path"])
-                    if h["path"] else f'<code class="text-xs text-gray-700 break-all">{cmd_display}</code>')
+        cmd_html = (_open_link(f'<code style="font-size:12px;color:var(--text-s);word-break:break-all">{cmd_display}</code>', h["path"])
+                    if h["path"] else f'<code style="font-size:12px;color:var(--text-s);word-break:break-all">{cmd_display}</code>')
         parts.append(f"""<div class="card flex items-start gap-4">
-  <span class="badge {color} whitespace-nowrap mt-0.5">{_e(h['trigger'])}</span>
-  <div class="flex-1 min-w-0">{cmd_html}
-    {f'<p class="text-xs text-gray-400 mt-1">matcher: {_e(h["matcher"])}</p>' if h.get("matcher") else ''}
+  <span class="badge {color}" style="white-space:nowrap;margin-top:2px">{_e(h['trigger'])}</span>
+  <div style="flex:1;min-width:0">{cmd_html}
+    {f'<p style="font-size:11px;color:var(--text-t);margin-top:4px">matcher: {_e(h["matcher"])}</p>' if h.get("matcher") else ''}
   </div>
 </div>""")
     return "".join(parts)
@@ -724,9 +719,9 @@ def render_hooks(hooks: list) -> str:
 
 def render_mcp(servers: list) -> str:
     if not servers:
-        return '<div class="text-gray-400 text-sm py-8 text-center">No MCP servers configured</div>'
+        return '<div style="color:var(--text-t);font-size:14px;padding:32px;text-align:center">No MCP servers configured</div>'
     never_count = sum(1 for s in servers if not s.get("last_used", ""))
-    summary = f'<span class="text-xs text-red-500 font-medium">{never_count} never used</span>' if never_count else ""
+    summary = f'<span class="badge badge-red">{never_count} never used</span>' if never_count else ""
     sort_bar = _sort_bar("mcp-grid")
     header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>'
     cards = []
@@ -738,12 +733,12 @@ def render_mcp(servers: list) -> str:
         last_iso = _e(s.get("last_used", ""))
         count = s.get("usage_count", 0)
         usage_badge = _usage_html({"count": count, "last_used": s.get("last_used", "")})
-        src_badge = f'<span class="badge bg-gray-100 text-gray-500">{src}</span>' if src else ""
+        src_badge = f'<span class="badge badge-gray">{src}</span>' if src else ""
         cards.append(
             f'<div class="card" data-name="{_e(s["name"].lower())}" data-count="{count}" data-last="{last_iso}">'
             f'<div class="flex items-center justify-between mb-1">'
-            f'<h3 class="font-semibold text-gray-900">{_e(s["name"])}</h3>{src_badge}</div>'
-            f'<code class="text-xs text-gray-600 break-all">{_e(s.get("command", ""))} {args}</code>'
+            f'<h3 style="font-weight:600;color:var(--text-p)">{_e(s["name"])}</h3>{src_badge}</div>'
+            f'<code style="font-size:12px;color:var(--text-s);word-break:break-all">{_e(s.get("command", ""))} {args}</code>'
             f'{f"<div class=mt-2>{usage_badge}</div>" if usage_badge else ""}'
             f'</div>'
         )
@@ -754,12 +749,12 @@ def render_rules(rules: list) -> str:
     cards = []
     for r in rules:
         files_html = "".join(
-            f'<li class="text-xs py-0.5">{_open_link(_e(f["name"]), f["path"], "text-indigo-600")}</li>'
+            f'<li style="font-size:13px;padding:2px 0">{_open_link(_e(f["name"]), f["path"], "al")}</li>'
             for f in r["files"]
         )
         cards.append(f"""<div class="card">
-  <h3 class="font-semibold text-gray-900 mb-2">{_e(r["category"])}/</h3>
-  <ul class="list-disc list-inside space-y-0.5">{files_html}</ul>
+  <h3 style="font-weight:600;color:var(--text-p);margin-bottom:8px">{_e(r["category"])}/</h3>
+  <ul class="list-disc list-inside" style="line-height:1.8">{files_html}</ul>
 </div>""")
     return "".join(cards)
 
@@ -779,7 +774,7 @@ def render_cleanup(agents: list, skills: list, mcp_servers: list) -> str:
     total = len(stale_agents) + len(stale_skills) + len(stale_mcp)
 
     if total == 0:
-        return '<div class="text-center py-12 text-gray-400 text-sm">Everything looks active — no stale items found.</div>'
+        return '<div style="text-align:center;padding:48px;color:var(--text-t);font-size:14px">Everything looks active — no stale items found.</div>'
 
     def section(title: str, items: list, type_label: str) -> str:
         if not items:
@@ -789,36 +784,29 @@ def render_cleanup(agents: list, skills: list, mcp_servers: list) -> str:
             name = item.get("name", item.get("label", ""))
             path = item.get("path", item.get("readme_path", ""))
             usage_badge = _usage_html({"count": item.get("usage_count", 0), "last_used": item.get("last_used", "")})
-            link = (_open_link(f'<span class="font-medium text-indigo-700">{_e(name)}</span>', path)
-                    if path else f'<span class="font-medium text-gray-700">{_e(name)}</span>')
+            link = (_open_link(f'<span style="font-weight:500" class="al">{_e(name)}</span>', path)
+                    if path else f'<span style="font-weight:500;color:var(--text-p)">{_e(name)}</span>')
             rows.append(
-                f'<tr class="border-b hover:bg-gray-50">'
-                f'<td class="px-4 py-2">{link}</td>'
-                f'<td class="px-4 py-2"><span class="badge bg-gray-100 text-gray-500 text-xs">{type_label}</span></td>'
-                f'<td class="px-4 py-2">{usage_badge}</td>'
+                f'<tr>'
+                f'<td>{link}</td>'
+                f'<td><span class="badge badge-gray">{type_label}</span></td>'
+                f'<td>{usage_badge}</td>'
                 f'</tr>'
             )
-        return f"""<div class="mb-6">
-  <h3 class="font-semibold text-gray-700 mb-2">{_e(title)} <span class="badge bg-red-100 text-red-600">{len(items)}</span></h3>
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 border-b">
-        <tr>
-          <th class="text-left px-4 py-2 font-semibold text-gray-600">Name</th>
-          <th class="text-left px-4 py-2 font-semibold text-gray-600">Type</th>
-          <th class="text-left px-4 py-2 font-semibold text-gray-600">Status</th>
-        </tr>
-      </thead>
+        return f"""<div style="margin-bottom:24px">
+  <h3 style="font-weight:600;color:var(--text-p);margin-bottom:8px">{_e(title)} <span class="badge badge-red">{len(items)}</span></h3>
+  <div style="border-radius:8px;overflow:hidden">
+    <table class="at">
+      <thead><tr><th>Name</th><th>Type</th><th>Status</th></tr></thead>
       <tbody>{"".join(rows)}</tbody>
     </table>
   </div>
 </div>"""
 
-    summary = f"""<div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6 flex items-center gap-3">
-  <span class="text-2xl">🧹</span>
+    summary = f"""<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:14px">
   <div>
-    <p class="font-semibold text-amber-800">{total} items haven't been used in the last {STALE_DAYS} days (in this scope)</p>
-    <p class="text-xs text-amber-600 mt-0.5">Review these to keep your ~/.claude lean</p>
+    <p style="font-weight:600;color:#92400e;font-size:14px">{total} items haven&#39;t been used in the last {STALE_DAYS} days</p>
+    <p style="font-size:12px;color:#b45309;margin-top:2px">Review these to keep your .claude lean</p>
   </div>
 </div>"""
 
@@ -847,75 +835,134 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 <title>Claude Config Dashboard · {_e(dir_label)}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
-  .tab-btn {{ transition: all .15s; }}
-  .tab-btn.active {{ background:#6366f1; color:white; }}
-  .tab-content {{ display:none; }}
-  .tab-content.active {{ display:block; }}
-  .badge {{ display:inline-block; padding:1px 8px; border-radius:9999px; font-size:11px; font-weight:600; }}
-  .card {{ border:1px solid #e5e7eb; border-radius:8px; padding:16px; background:white; transition:border-color .15s,box-shadow .15s; }}
-  .card:hover {{ border-color:#a5b4fc; box-shadow:0 2px 8px rgba(99,102,241,.1); }}
-  .source-custom {{ background:#d1fae5; color:#065f46; }}
-  .source-plugin {{ background:#dbeafe; color:#1e40af; }}
-  .source-symlink {{ background:#fef3c7; color:#92400e; }}
-  details summary {{ cursor:pointer; list-style:none; }}
-  details summary::before {{ content:"▶"; margin-right:6px; font-size:10px; color:#6366f1; transition:transform .2s; }}
-  details[open] summary::before {{ transform:rotate(90deg); }}
-  a {{ cursor:pointer; }}
-  .stale-recent {{ background:#d1fae5; color:#065f46; }}
-  .stale-mid    {{ background:#fef3c7; color:#92400e; }}
-  .stale-old    {{ background:#fee2e2; color:#991b1b; }}
-  .stale-never  {{ background:#fee2e2; color:#991b1b; font-weight:700; }}
-  .usage-count  {{ background:#e0e7ff; color:#3730a3; }}
-  .sort-bar {{ display:flex; align-items:center; gap:4px; }}
-  .sort-btn {{
-    padding:2px 10px; border-radius:9999px; font-size:11px; font-weight:600;
-    border:1px solid #e5e7eb; background:white; color:#6b7280; cursor:pointer; transition:all .15s;
+  :root {{
+    --ab: #0071e3; --al: #0066cc;
+    --surface: #f5f5f7; --text-p: #1d1d1f;
+    --text-s: rgba(0,0,0,.56); --text-t: rgba(0,0,0,.40);
+    --shadow: rgba(0,0,0,.10) 0 2px 16px 0;
+    --shadow-h: rgba(0,0,0,.16) 0 4px 24px 0;
   }}
-  .sort-btn:hover {{ border-color:#6366f1; color:#6366f1; }}
-  .sort-btn.active {{ background:#6366f1; color:white; border-color:#6366f1; }}
-  .project-select {{ font-size:13px; }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 15px; line-height: 1.47; letter-spacing: -0.02em;
+    background: var(--surface); color: var(--text-p); margin: 0;
+  }}
+  .nav {{
+    position: sticky; top: 0; z-index: 50; height: 52px;
+    background: rgba(22,22,23,.9);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    display: flex; align-items: center; padding: 0 24px; gap: 20px;
+  }}
+  .nav-brand {{ flex: 0 0 auto; }}
+  .nav-title {{ font-size: 15px; font-weight: 600; color: #fff; letter-spacing: -0.022em; }}
+  .nav-sub {{ font-size: 11px; color: rgba(255,255,255,.42); margin-top: 1px; }}
+  .nav-stat {{ text-align: center; }}
+  .nav-stat-n {{ font-size: 19px; font-weight: 700; color: #fff; line-height: 1.1; letter-spacing: -0.03em; }}
+  .nav-stat-l {{ font-size: 10px; color: rgba(255,255,255,.42); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }}
+  .nav-stat-w {{ font-size: 9px; color: rgba(255,100,100,.9); }}
+  .dir-select {{
+    font-size: 12px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.85);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 3px 8px; outline: none;
+  }}
+  .dir-select option {{ background: #1d1d1f; color: #fff; }}
+  .stop-btn {{
+    font-size: 12px; padding: 4px 14px; border-radius: 980px;
+    border: 1px solid rgba(255,255,255,.22); color: rgba(255,255,255,.6);
+    background: transparent; cursor: pointer; transition: all .15s; white-space: nowrap;
+  }}
+  .stop-btn:hover {{ background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.5); }}
+  .tab-bar {{
+    background: #fff; border-bottom: 1px solid rgba(0,0,0,.06);
+    padding: 8px 24px; display: flex; gap: 4px; flex-wrap: wrap;
+  }}
+  .tab-btn {{
+    font-size: 13px; font-weight: 500; letter-spacing: -0.01em; color: var(--text-s);
+    border-radius: 980px; padding: 5px 14px; border: none; background: transparent; cursor: pointer; transition: all .15s;
+  }}
+  .tab-btn:hover:not(.active) {{ background: rgba(0,0,0,.06); color: var(--text-p); }}
+  .tab-btn.active {{ background: var(--text-p); color: #fff; }}
+  .tab-content {{ display: none; }}
+  .tab-content.active {{ display: block; }}
+  .content {{ padding: 24px; max-width: 1040px; margin: 0 auto; }}
+  .card {{
+    background: #fff; border-radius: 8px; padding: 16px;
+    box-shadow: var(--shadow); border: none; transition: box-shadow .2s;
+  }}
+  .card:hover {{ box-shadow: var(--shadow-h); }}
+  .badge {{
+    display: inline-block; padding: 1px 8px; border-radius: 980px;
+    font-size: 11px; font-weight: 600; letter-spacing: -.01em;
+  }}
+  .al {{ color: var(--al); text-decoration: none; cursor: pointer; }}
+  .al:hover {{ text-decoration: underline; }}
+  .badge-blue {{ background: rgba(0,113,227,.10); color: var(--ab); }}
+  .badge-green {{ background: #d1fae5; color: #065f46; }}
+  .badge-gray {{ background: rgba(0,0,0,.06); color: rgba(0,0,0,.48); }}
+  .badge-red {{ background: #fee2e2; color: #991b1b; }}
+  .badge-amber {{ background: #fef3c7; color: #92400e; }}
+  .source-custom {{ background: #d1fae5; color: #065f46; }}
+  .source-plugin {{ background: rgba(0,113,227,.10); color: var(--ab); }}
+  .source-symlink {{ background: #fef3c7; color: #92400e; }}
+  .stale-recent {{ background: #d1fae5; color: #065f46; }}
+  .stale-mid    {{ background: #fef9c3; color: #92400e; }}
+  .stale-old    {{ background: #fee2e2; color: #991b1b; }}
+  .stale-never  {{ background: #fee2e2; color: #991b1b; font-weight: 700; }}
+  .usage-count  {{ background: rgba(0,113,227,.10); color: var(--ab); }}
+  .sort-bar {{ display: flex; align-items: center; gap: 4px; }}
+  .sort-btn {{
+    padding: 2px 12px; border-radius: 980px; font-size: 12px; font-weight: 500;
+    border: 1px solid rgba(0,0,0,.12); background: #fff; color: var(--text-s);
+    cursor: pointer; transition: all .15s;
+  }}
+  .sort-btn:hover {{ color: var(--ab); border-color: var(--ab); }}
+  .sort-btn.active {{ background: var(--ab); color: #fff; border-color: var(--ab); }}
+  .at {{ border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }}
+  .at th {{
+    font-size: 11px; font-weight: 600; color: var(--text-t); text-transform: uppercase;
+    letter-spacing: .07em; padding: 10px 16px; text-align: left;
+    background: rgba(0,0,0,.02); border-bottom: 1px solid rgba(0,0,0,.06);
+  }}
+  .at td {{ padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,.05); font-size: 13px; vertical-align: middle; }}
+  .at tbody tr:last-child td {{ border-bottom: none; }}
+  .at tbody tr:hover {{ background: rgba(0,0,0,.02); }}
+  details summary {{ cursor: pointer; list-style: none; }}
+  details summary::before {{ content: "▶"; margin-right: 6px; font-size: 9px; color: var(--text-t); transition: transform .2s; display: inline-block; }}
+  details[open] summary::before {{ transform: rotate(90deg); }}
+  a {{ cursor: pointer; }}
 </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body>
 
-<div class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-  <div class="flex items-center gap-3">
-    <span class="text-2xl">🤖</span>
-    <div>
-      <h1 class="text-lg font-bold text-gray-900">Claude Config Dashboard</h1>
-      <p class="text-xs text-gray-400">{_e(dir_label)} · {now}</p>
-    </div>
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-title">Claude Config Dashboard</div>
+    <div class="nav-sub">{_e(dir_label)} · {now}</div>
   </div>
-  <div class="flex items-center gap-6">
-    <div class="flex gap-4 text-center">
-      {_stats_header([
-          (len(p),"Plugins",0),(len(ag),"Agents",agents_never),
-          (len(sk),"Skills",skills_never),(len(co),"Commands",0),
-          (len(ho),"Hooks",0),(len(mc),"MCP",mcp_never),
-      ])}
-    </div>
-    {"" if not dir_sel else f'<div class="flex flex-col items-end gap-1"><div class="text-xs text-gray-400">Config dir</div>{dir_sel}</div>'}
-    <button onclick="fetch('/stop').then(()=>window.close())"
-      class="text-xs px-3 py-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50 transition">
-      Stop server
-    </button>
+  <div style="flex:1"></div>
+  <div style="display:flex;gap:20px;align-items:center">
+    {_stats_header([
+        (len(p),"Plugins",0),(len(ag),"Agents",agents_never),
+        (len(sk),"Skills",skills_never),(len(co),"Commands",0),
+        (len(ho),"Hooks",0),(len(mc),"MCP",mcp_never),
+    ])}
+    {f'<div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end"><span style="font-size:10px;color:rgba(255,255,255,.38);text-transform:uppercase;letter-spacing:.06em">Config dir</span>{dir_sel}</div>' if dir_sel else ""}
+    <button class="stop-btn" onclick="fetch('/stop').then(()=>window.close())">Stop server</button>
   </div>
-</div>
+</nav>
 
-<div class="bg-white border-b border-gray-200 px-6">
-  <div class="flex gap-1 py-2 flex-wrap">{_tab_btns()}</div>
-</div>
+<div class="tab-bar">{_tab_btns()}</div>
 
-<div class="px-6 py-6 max-w-7xl mx-auto">
+<div class="content">
 
 <div id="tab-plugins" class="tab-content">
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{render_plugins(p)}</div>
 </div>
 
 <div id="tab-agents" class="tab-content">
-  <p class="text-xs text-gray-400 mb-4">{len(ag)} agents · {n_cats} categories · Click name to open in default app
-  {f' · <span class="text-red-400 font-medium">{agents_never} never used in this scope</span>' if agents_never else ''}
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">{len(ag)} agents · {n_cats} categories · Click name to open
+  {f' · <span style="color:#c0392b;font-weight:500">{agents_never} never used</span>' if agents_never else ''}
   </p>
   {render_agents(ag)}
 </div>
@@ -925,20 +972,17 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 </div>
 
 <div id="tab-commands" class="tab-content">
-  <p class="text-xs text-gray-400 mb-3">Click command to open in default app</p>
-  <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 border-b"><tr>
-        <th class="text-left px-4 py-2 font-semibold text-gray-600">Command</th>
-        <th class="text-left px-4 py-2 font-semibold text-gray-600">Description</th>
-      </tr></thead>
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click command to open in default app</p>
+  <div style="border-radius:8px;overflow:hidden">
+    <table class="at">
+      <thead><tr><th>Command</th><th>Description</th></tr></thead>
       <tbody>{render_commands(co)}</tbody>
     </table>
   </div>
 </div>
 
 <div id="tab-hooks" class="tab-content">
-  <p class="text-xs text-gray-400 mb-3">Click command to open script file</p>
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click command to open script file</p>
   <div class="space-y-3">{render_hooks(ho)}</div>
 </div>
 
@@ -947,7 +991,7 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 </div>
 
 <div id="tab-rules" class="tab-content">
-  <p class="text-xs text-gray-400 mb-3">Click filename to open in default app</p>
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click filename to open in default app</p>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">{render_rules(ru)}</div>
 </div>
 
