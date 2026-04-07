@@ -1,0 +1,16 @@
+{
+  "name": "claude-config-dashboard",
+  "description": "Local web dashboard for ~/.claude config visualization — shows plugins, agents, skills, commands, hooks, and MCP servers",
+  "version": "1.0.0",
+  "author": {
+    "name": "AshtonYoon",
+    "url": "https://github.com/AshtonYoon"
+  },
+  "commands": [
+    "./commands/claude-config-dashboard.md"
+  ],
+  "homepage": "https://github.com/AshtonYoon/claude-config-dashboard",
+  "repository": "https://github.com/AshtonYoon/claude-config-dashboard",
+  "license": "MIT",
+  "keywords": ["dashboard", "config", "visualization", "plugins", "agents"]
+}
