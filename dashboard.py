@@ -1155,6 +1155,10 @@ def main():
                 print(f"  {k:<12}: {len(v)}")
         all_data["cwd"] = (cwd_data, CWD_CLAUDE)
 
+    # Usage stats always read from HOME_CLAUDE (that's where the logs live)
+    global CLAUDE_DIR
+    CLAUDE_DIR = HOME_CLAUDE
+
     print("\n  Pre-computing usage stats ...")
     get_cached_usage("*")
 
