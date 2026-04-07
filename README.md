@@ -4,30 +4,16 @@ A Claude Code plugin that provides a local web dashboard for visualizing all thi
 
 ## Install
 
-Add to your `~/.claude/settings.json`:
-
-```json
-{
-  "enabledPlugins": {
-    "claude-config-dashboard@claude-config-dashboard": true
-  },
-  "extraKnownMarketplaces": {
-    "claude-config-dashboard": {
-      "source": {
-        "source": "github",
-        "repo": "AshtonYoon/claude-config-dashboard"
-      }
-    }
-  }
-}
 ```
-
-Then run `/install-plugin` or restart Claude Code.
+/plugin marketplace add AshtonYoon/claude-config-dashboard
+/plugin install claude-config-dashboard
+/reload-plugins
+```
 
 ## Usage
 
 ```
-/claude-config-dashboard
+/claude-config-dashboard:show
 ```
 
 The dashboard opens at **http://localhost:9876**.
