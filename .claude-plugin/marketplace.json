@@ -1,0 +1,18 @@
+{
+  "name": "claude-config-dashboard",
+  "owner": {
+    "name": "AshtonYoon",
+    "email": ""
+  },
+  "metadata": {
+    "description": "Local web dashboard for ~/.claude config visualization",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "claude-config-dashboard",
+      "source": "./",
+      "description": "Local web dashboard for ~/.claude config visualization — shows plugins, agents, skills, commands, hooks, and MCP servers"
+    }
+  ]
+}
