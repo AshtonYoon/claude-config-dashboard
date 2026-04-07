@@ -549,7 +549,8 @@ def _tab_btns() -> str:
 def _stats_header(items: list) -> str:
     parts = []
     for n, label, never in items:
-        unused_line = f'<div class="nav-stat-w">{never} unused</div>' if never else ""
+        unused_line = (f'<div class="nav-stat-w">{never} unused</div>'
+                       if never else '<div class="nav-stat-w" style="visibility:hidden">·</div>')
         parts.append(
             f'<div class="nav-stat">'
             f'<div class="nav-stat-n">{n}</div>'
@@ -869,10 +870,11 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
   .dir-select option {{ background: #1d1d1f; color: #fff; }}
   .stop-btn {{
     font-size: 12px; padding: 4px 14px; border-radius: 980px;
-    border: 1px solid rgba(255,255,255,.22); color: rgba(255,255,255,.6);
-    background: transparent; cursor: pointer; transition: all .15s; white-space: nowrap;
+    border: none; color: #fff;
+    background: #c0392b; cursor: pointer; transition: all .15s; white-space: nowrap;
+    font-weight: 500;
   }}
-  .stop-btn:hover {{ background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.5); }}
+  .stop-btn:hover {{ background: #e74c3c; }}
   .tab-bar {{
     background: #fff; border-bottom: 1px solid rgba(0,0,0,.06);
     padding: 8px 24px; display: flex; gap: 4px; flex-wrap: wrap;
