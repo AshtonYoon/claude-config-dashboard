@@ -7,7 +7,7 @@
     "url": "https://github.com/AshtonYoon"
   },
   "commands": [
-    "./commands/claude-config-dashboard.md"
+    "./commands/show.md"
   ],
   "homepage": "https://github.com/AshtonYoon/claude-config-dashboard",
   "repository": "https://github.com/AshtonYoon/claude-config-dashboard",
