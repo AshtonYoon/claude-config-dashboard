@@ -850,7 +850,7 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
     background: var(--surface); color: var(--text-p); margin: 0;
   }}
   .nav {{
-    position: sticky; top: 0; z-index: 50; height: 52px;
+    position: sticky; top: 0; z-index: 50; height: 72px;
     background: rgba(22,22,23,.9);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
