@@ -2,6 +2,9 @@
 
 A Claude Code plugin that provides a local web dashboard for visualizing all third-party elements installed in `~/.claude`.
 
+<img width="1753" height="635" alt="image" src="https://github.com/user-attachments/assets/6f987c73-effb-43c0-88c0-5ddd9545ff21" />
+
+
 ## Install
 
 ```
