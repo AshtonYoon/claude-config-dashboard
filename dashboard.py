@@ -22,8 +22,10 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-_cwd_claude = Path.cwd() / ".claude"
-CLAUDE_DIR = _cwd_claude if _cwd_claude.is_dir() else Path.home() / ".claude"
+HOME_CLAUDE = Path.home() / ".claude"
+_cwd_path = Path.cwd() / ".claude"
+CWD_CLAUDE = _cwd_path if (_cwd_path.is_dir() and _cwd_path.resolve() != HOME_CLAUDE.resolve()) else None
+CLAUDE_DIR = HOME_CLAUDE  # mutable global used by collectors; set before each collection
 PORT_DEFAULT = 9876
 
 
@@ -556,17 +558,20 @@ def _stats_header(items: list) -> str:
         )
     return "".join(parts)
 
-def _project_selector(known_projects: list, selected: str) -> str:
-    options = ['<option value="*"' + (' selected' if selected == "*" else "") + '>🌐 All Projects</option>']
-    for p in known_projects:
-        sel = ' selected' if p["cwd"] == selected else ""
-        label = _e(f'{p["name"]} ({p["sessions"]} sessions)')
-        options.append(f'<option value="{_e(p["cwd"])}"{sel}>{label}</option>')
-    opts_html = "".join(options)
+def _dir_selector(selected_dir: str) -> str:
+    """Toggle between ~/.claude (home) and cwd/.claude (cwd), if both exist."""
+    if CWD_CLAUDE is None:
+        return ""
+    home_label = "~/.claude"
+    cwd_label = "~/" + str(CWD_CLAUDE.relative_to(Path.home()))
+    options = [
+        f'<option value="home"{"  selected" if selected_dir == "home" else ""}>{_e(home_label)}</option>',
+        f'<option value="cwd"{"  selected" if selected_dir == "cwd" else ""}>{_e(cwd_label)}</option>',
+    ]
     return (
         f'<select class="project-select text-sm border border-gray-200 rounded px-2 py-1 bg-white text-gray-700"'
-        f' onchange="window.location=\'/?project=\'+encodeURIComponent(this.value)">'
-        f'{opts_html}</select>'
+        f' onchange="window.location=\'/?dir=\'+this.value">'
+        + "".join(options) + "</select>"
     )
 
 
@@ -822,7 +827,7 @@ def render_cleanup(agents: list, skills: list, mcp_servers: list) -> str:
 
 # ─── Build HTML ───────────────────────────────────────────────────────────────
 
-def build_html(data: dict, project_cwd: str, known_projects: list) -> str:
+def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     p, ag, sk, co, ho, mc, ru = (data["plugins"], data["agents"], data["skills"],
         data["commands"], data["hooks"], data["mcp_servers"], data["rules"])
@@ -831,22 +836,15 @@ def build_html(data: dict, project_cwd: str, known_projects: list) -> str:
     skills_never = sum(1 for s in sk if not s.get("last_used", ""))
     mcp_never    = sum(1 for m in mc if not m.get("last_used", ""))
 
-    if project_cwd == "*":
-        scope_label = "🌐 All Projects"
-        scope_badge = '<span class="badge bg-gray-100 text-gray-600">global</span>'
-    else:
-        scope_name = Path(project_cwd).name
-        scope_label = scope_name
-        scope_badge = f'<span class="badge bg-indigo-100 text-indigo-700" title="{_e(project_cwd)}">{_e(scope_name)}</span>'
-
-    project_sel = _project_selector(known_projects, project_cwd)
+    dir_label = str(claude_dir).replace(str(Path.home()), "~")
+    dir_sel = _dir_selector(selected_dir)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Claude Config Dashboard · {_e(scope_label)}</title>
+<title>Claude Config Dashboard · {_e(dir_label)}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
@@ -886,7 +884,7 @@ def build_html(data: dict, project_cwd: str, known_projects: list) -> str:
     <span class="text-2xl">🤖</span>
     <div>
       <h1 class="text-lg font-bold text-gray-900">Claude Config Dashboard</h1>
-      <p class="text-xs text-gray-400">{str(CLAUDE_DIR).replace(str(Path.home()), "~")} · {now}</p>
+      <p class="text-xs text-gray-400">{_e(dir_label)} · {now}</p>
     </div>
   </div>
   <div class="flex items-center gap-6">
@@ -897,10 +895,11 @@ def build_html(data: dict, project_cwd: str, known_projects: list) -> str:
           (len(ho),"Hooks",0),(len(mc),"MCP",mcp_never),
       ])}
     </div>
-    <div class="flex flex-col items-end gap-1">
-      <div class="text-xs text-gray-400">Scope</div>
-      {project_sel}
-    </div>
+    {"" if not dir_sel else f'<div class="flex flex-col items-end gap-1"><div class="text-xs text-gray-400">Config dir</div>{dir_sel}</div>'}
+    <button onclick="fetch('/stop').then(()=>window.close())"
+      class="text-xs px-3 py-1.5 rounded border border-red-200 text-red-500 hover:bg-red-50 transition">
+      Stop server
+    </button>
   </div>
 </div>
 
@@ -1014,7 +1013,7 @@ function sortTable(tableId) {{
 
 # ─── HTTP Server (dynamic) ────────────────────────────────────────────────────
 
-def make_handler(raw_data: dict, known_projects: list):
+def make_handler(all_data: dict, server_ref: list):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
@@ -1031,12 +1030,19 @@ def make_handler(raw_data: dict, known_projects: list):
                         os.startfile(path)
                 self._respond(200, b"ok", "text/plain")
 
+            elif parsed.path == "/stop":
+                self._respond(200, b"stopping", "text/plain")
+                threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
+
             elif parsed.path in ("/", "/index.html"):
                 qs = urllib.parse.parse_qs(parsed.query)
-                project_cwd = qs.get("project", ["*"])[0]
-                usage = get_cached_usage(project_cwd)
+                selected_dir = qs.get("dir", ["home"])[0]
+                if selected_dir not in all_data:
+                    selected_dir = "home"
+                raw_data, claude_dir = all_data[selected_dir]
+                usage = get_cached_usage("*")
                 data = enrich_data(raw_data, usage)
-                html = build_html(data, project_cwd, known_projects)
+                html = build_html(data, claude_dir, selected_dir)
                 self._respond(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
             else:
@@ -1065,16 +1071,11 @@ def make_handler(raw_data: dict, known_projects: list):
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
-    parser = argparse.ArgumentParser(description="Claude Config Dashboard")
-    parser.add_argument("--port", type=int, default=PORT_DEFAULT)
-    parser.add_argument("--project", default=None,
-                        help="Scope usage stats to a specific project path (default: all)")
-    args = parser.parse_args()
-
-    print("Scanning ~/.claude ...")
+def _scan_dir(claude_dir: Path) -> dict:
+    global CLAUDE_DIR
+    CLAUDE_DIR = claude_dir
     settings = load_settings()
-    raw_data = {
+    data = {
         "plugins":     collect_plugins_raw(settings),
         "agents":      collect_agents_raw(),
         "skills":      collect_skills_raw(),
@@ -1083,32 +1084,47 @@ def main():
         "mcp_servers": collect_mcp_servers_raw(settings),
         "rules":       collect_rules(),
     }
-    for k, v in raw_data.items():
+    return data
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Claude Config Dashboard")
+    parser.add_argument("--port", type=int, default=PORT_DEFAULT)
+    args = parser.parse_args()
+
+    print(f"Scanning {HOME_CLAUDE} ...")
+    home_data = _scan_dir(HOME_CLAUDE)
+    for k, v in home_data.items():
         if isinstance(v, list):
             print(f"  {k:<12}: {len(v)}")
 
-    print("  Loading project list...")
-    known_projects = list_known_projects()
-    print(f"  {len(known_projects)} known projects")
+    all_data: dict = {"home": (home_data, HOME_CLAUDE)}
 
-    # Pre-warm the default scope
-    default_project = args.project or "*"
-    print(f"  Pre-computing usage stats (scope: {default_project}) ...")
-    get_cached_usage(default_project)
+    if CWD_CLAUDE is not None:
+        cwd_label = "~/" + str(CWD_CLAUDE.relative_to(Path.home()))
+        print(f"\nScanning {cwd_label} ...")
+        cwd_data = _scan_dir(CWD_CLAUDE)
+        for k, v in cwd_data.items():
+            if isinstance(v, list):
+                print(f"  {k:<12}: {len(v)}")
+        all_data["cwd"] = (cwd_data, CWD_CLAUDE)
+
+    print("\n  Pre-computing usage stats ...")
+    get_cached_usage("*")
 
     initial_url = f"http://localhost:{args.port}"
-    if default_project != "*":
-        initial_url += f"?project={urllib.parse.quote(default_project)}"
-
-    server = HTTPServer(("localhost", args.port), make_handler(raw_data, known_projects))
-    print(f"\nDashboard → {initial_url}")
-    print("Click any filename to open in default app. Stop: Ctrl+C\n")
+    server_ref: list = [None]
+    server = HTTPServer(("localhost", args.port), make_handler(all_data, server_ref))
+    server_ref[0] = server
+    print(f"Dashboard → {initial_url}")
+    print("Click any filename to open in default app. Stop: Ctrl+C or the Stop button\n")
 
     threading.Thread(target=lambda: __import__("webbrowser").open(initial_url), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServer stopped")
+        pass
+    print("Server stopped")
 
 
 if __name__ == "__main__":
