@@ -167,9 +167,17 @@ def _stale_info(last_used: str) -> tuple:
         return None, "Never used", "stale-never"
     try:
         dt = datetime.fromisoformat(last_used.replace("Z", "+00:00"))
-        days = (datetime.now(timezone.utc) - dt).days
+        delta = datetime.now(timezone.utc) - dt
+        total_seconds = max(int(delta.total_seconds()), 0)
+        days = total_seconds // 86400
         date_str = dt.strftime("%Y-%m-%d")
-        if days <= 7:
+        if total_seconds < 3600:
+            minutes = max(total_seconds // 60, 1)
+            return days, f"Used {minutes}m ago", "stale-recent"
+        elif total_seconds < 86400:
+            hours = total_seconds // 3600
+            return days, f"Used {hours}h ago", "stale-recent"
+        elif days <= 7:
             return days, f"Used {days}d ago", "stale-recent"
         elif days <= 30:
             return days, f"Used {days}d ago", "stale-mid"
@@ -332,7 +340,7 @@ def collect_agents_raw() -> list:
 
 def collect_skills_raw() -> list:
     skills_dir = CLAUDE_DIR / "skills"
-    ecc_dir = CLAUDE_DIR / "everything-claude-code" / "skills"
+    cache_dir = CLAUDE_DIR / "plugins" / "cache"
     skills = []
 
     def scan(base: Path, source: str):
@@ -367,18 +375,50 @@ def collect_skills_raw() -> list:
                     "path": str(item),
                 })
 
+    def count_skill_entries(base: Path) -> int:
+        if not base.exists():
+            return 0
+        total = 0
+        for item in base.iterdir():
+            if item.name.startswith(".") or item.name == "learned":
+                continue
+            if item.is_dir() or item.suffix == ".md":
+                total += 1
+        return total
+
     scan(skills_dir, "custom")
 
-    if ecc_dir.exists():
-        ecc_count = sum(1 for d in ecc_dir.iterdir() if d.is_dir() and not d.name.startswith("."))
-        skills.append({
-            "name": f"everything-claude-code ({ecc_count} skills)",
-            "slug": "everything-claude-code",
-            "description": "Complete skill set from everything-claude-code plugin",
-            "source": "plugin:everything-claude-code",
-            "is_symlink": False,
-            "path": str(ecc_dir),
-        })
+    seen_plugins: set[str] = set()
+    if cache_dir.exists():
+        for marketplace_dir in sorted(d for d in cache_dir.iterdir() if d.is_dir() and not d.name.startswith(".")):
+            for plugin_dir in sorted(d for d in marketplace_dir.iterdir() if d.is_dir() and not d.name.startswith(".")):
+                versions = [d for d in plugin_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
+                if not versions:
+                    continue
+                latest = sorted(versions, key=lambda p: p.name)[-1]
+                skills_path = latest / "skills"
+                if not skills_path.exists() or plugin_dir.name in seen_plugins:
+                    continue
+                seen_plugins.add(plugin_dir.name)
+                pkg = latest / "package.json"
+                description = ""
+                if pkg.exists():
+                    try:
+                        description = json.loads(pkg.read_text()).get("description", "")
+                    except Exception:
+                        description = ""
+                skill_count = count_skill_entries(skills_path)
+                if skill_count == 0:
+                    continue
+                skills.append({
+                    "name": f"{plugin_dir.name} ({skill_count} skills)",
+                    "slug": plugin_dir.name,
+                    "plugin_namespace": plugin_dir.name,
+                    "description": (description or f"Skill bundle from {plugin_dir.name} plugin")[:100],
+                    "source": f"plugin:{plugin_dir.name}",
+                    "is_symlink": False,
+                    "path": str(skills_path),
+                })
     return skills
 
 
@@ -485,14 +525,29 @@ def enrich_skills(skills: list, usage: dict) -> list:
     result = []
     for s in skills:
         slug = s["slug"]
-        if slug == "everything-claude-code":
-            count = sum(v["count"] for k, v in skill_stats.items() if k.startswith("everything-claude-code:"))
+        plugin_namespace = s.get("plugin_namespace", "")
+        child_usage = []
+        if plugin_namespace:
+            prefix = plugin_namespace + ":"
+            count = sum(v["count"] for k, v in skill_stats.items() if k.startswith(prefix))
             last = max((v["last_used"] for k, v in skill_stats.items()
-                        if k.startswith("everything-claude-code:") and v["last_used"]), default="")
+                        if k.startswith(prefix) and v["last_used"]), default="")
+            child_usage = [
+                {
+                    "name": k.removeprefix(prefix),
+                    "count": v["count"],
+                    "last_used": v["last_used"],
+                }
+                for k, v in skill_stats.items()
+                if k.startswith(prefix)
+            ]
+            child_usage.sort(key=lambda item: item["name"])
+            child_usage.sort(key=lambda item: item["last_used"], reverse=True)
+            child_usage.sort(key=lambda item: item["count"], reverse=True)
         else:
             stat = skill_stats.get(slug, {"count": 0, "last_used": ""})
             count, last = stat["count"], stat["last_used"]
-        result.append({**s, "usage_count": count, "last_used": last})
+        result.append({**s, "usage_count": count, "last_used": last, "child_usage": child_usage})
     return result
 
 
@@ -659,6 +714,9 @@ def render_skills(skills: list) -> str:
         is_sym = s.get("is_symlink", False)
         last_iso = _e(s.get("last_used", ""))
         count = s.get("usage_count", 0)
+        child_usage = s.get("child_usage", [])
+        child_usage_json = _e(json.dumps(child_usage, separators=(",", ":")))
+        clickable = bool(child_usage)
 
         if src == "custom":
             badge = '<span class="badge source-custom">custom</span>'
@@ -674,12 +732,15 @@ def render_skills(skills: list) -> str:
                  if path else f'<span style="font-weight:500;font-size:14px;color:var(--text-p)">{name}</span>')
         desc_html = f'<p style="font-size:12px;color:var(--text-s)">{desc}</p>' if desc else ""
         usage_html = f'<div style="margin-top:8px">{usage_badge}</div>' if usage_badge else ""
+        click_badge = '<div style="margin-top:8px;font-size:11px;color:var(--brand)">Click to view child skill usage</div>' if clickable else ""
+        card_class = 'card skill-item skill-item-clickable' if clickable else 'card skill-item'
         cards.append(
-            f'<div class="card skill-item" data-name="{_e(s["name"].lower())}" '
-            f'data-count="{count}" data-last="{last_iso}">'
+            f'<div class="{card_class}" data-name="{_e(s["name"].lower())}" '
+            f'data-count="{count}" data-last="{last_iso}" '
+            f'data-skill-name="{name}" data-child-usage="{child_usage_json}">'
             f'<div class="flex items-start justify-between mb-1">{title}'
             f'<div class="flex gap-1 ml-2">{badge}</div></div>'
-            f'{desc_html}{usage_html}</div>'
+            f'{desc_html}{usage_html}{click_badge}</div>'
         )
     header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>'
     return f'{header}<div id="skills-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">{"".join(cards)}</div>'
@@ -880,11 +941,12 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
   .dir-select option {{ background: var(--surface); color: var(--text-p); }}
   .stop-btn {{
     font-size: 12px; padding: 5px 14px; border-radius: 8px;
-    border: 1px solid var(--border-warm); color: var(--text-s);
-    background: var(--surface); cursor: pointer; transition: all .15s; white-space: nowrap;
-    font-weight: 400;
+    background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%); cursor: pointer; transition: all .15s; white-space: nowrap;
+    font-weight: 600; color: #ffffff;
+    box-shadow: 0 8px 18px rgba(185, 28, 28, 0.22);
   }}
-  .stop-btn:hover {{ background: var(--border-warm); color: var(--text-p); }}
+  .stop-btn:hover {{ background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); color: #ffffff; box-shadow: 0 10px 22px rgba(220, 38, 38, 0.28); }}
+  .stop-btn:active {{ transform: translateY(1px); box-shadow: 0 6px 14px rgba(185, 28, 28, 0.2); }}
   .tab-bar {{
     background: var(--surface); border-bottom: 1px solid var(--border);
     padding: 8px 24px; display: flex; gap: 4px; flex-wrap: wrap;
@@ -903,6 +965,28 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
     box-shadow: var(--shadow); border: 1px solid var(--border); transition: box-shadow .2s;
   }}
   .card:hover {{ box-shadow: var(--shadow-ring); }}
+  .skill-item-clickable {{ cursor: pointer; }}
+  .skill-item-clickable:hover {{ border-color: rgba(201,100,66,.35); }}
+  .modal-backdrop {{
+    position: fixed; inset: 0; background: rgba(20,20,19,.45); z-index: 80;
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }}
+  .modal-backdrop.open {{ display: flex; }}
+  .modal {{
+    width: min(720px, 100%); max-height: 80vh; overflow: auto;
+    background: var(--surface-white); border: 1px solid var(--border-warm); border-radius: 12px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.18);
+  }}
+  .modal-head {{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding: 18px 20px; border-bottom: 1px solid var(--border);
+  }}
+  .modal-body {{ padding: 18px 20px 20px; }}
+  .modal-close {{
+    border: 1px solid var(--border-warm); background: var(--surface); color: var(--text-s);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  }}
+  .modal-empty {{ color: var(--text-t); font-size: 13px; text-align: center; padding: 24px 8px; }}
   .badge {{
     display: inline-block; padding: 1px 8px; border-radius: 980px;
     font-size: 11px; font-weight: 500; letter-spacing: .01em;
@@ -1038,6 +1122,19 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 
 </div>
 
+<div id="skill-usage-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="skill-usage-modal-title">
+    <div class="modal-head">
+      <div>
+        <div style="font-size:11px;color:var(--text-t);text-transform:uppercase;letter-spacing:.06em">Plugin skill usage</div>
+        <h2 id="skill-usage-modal-title" style="margin:0;font-size:18px;font-weight:600;color:var(--text-p)"></h2>
+      </div>
+      <button type="button" class="modal-close" id="skill-usage-modal-close">Close</button>
+    </div>
+    <div class="modal-body" id="skill-usage-modal-body"></div>
+  </div>
+</div>
+
 <script>
 // ── Floating characters ──────────────────────────────────────────
 (function() {{
@@ -1117,6 +1214,81 @@ function sortTable(tableId) {{
   rows.forEach(r => tbody.appendChild(r));
   table.dataset.sortAsc = asc ? '0' : '1';
 }}
+
+(function() {{
+  const modal = document.getElementById('skill-usage-modal');
+  const modalTitle = document.getElementById('skill-usage-modal-title');
+  const modalBody = document.getElementById('skill-usage-modal-body');
+  const closeBtn = document.getElementById('skill-usage-modal-close');
+  if (!modal || !modalTitle || !modalBody || !closeBtn) return;
+
+  function esc(text) {{
+    return String(text)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
+  }}
+
+  function usageBadge(item) {{
+    if (!item.last_used) return '<span class="badge stale-never">never used</span>';
+    return '<span class="badge usage-count">' + esc(item.count) + ' uses</span>' +
+      ' <span class="badge badge-gray">' + esc(item.last_used) + '</span>';
+  }}
+
+  function renderRows(items) {{
+    if (!items.length) {{
+      return '<div class="modal-empty">No recorded usage yet</div>';
+    }}
+    const rows = items.map((item) => {{
+      return '<tr data-count="' + esc(item.count) + '">' +
+        '<td style="font-weight:500">' + esc(item.name) + '</td>' +
+        '<td class="whitespace-nowrap">' + esc(item.count) + '</td>' +
+        '<td class="whitespace-nowrap">' + usageBadge(item) + '</td>' +
+        '</tr>';
+    }}).join('');
+    return '<div style="border-radius:8px;overflow:hidden">' +
+      '<table class="at"><thead><tr><th>Skill</th><th>Uses</th><th>Last used</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  }}
+
+  function openSkillUsageModal(card) {{
+    const title = card.dataset.skillName || 'Plugin skills';
+    let items = [];
+    try {{
+      items = JSON.parse(card.dataset.childUsage || '[]');
+    }} catch (_err) {{
+      items = [];
+    }}
+    modalTitle.textContent = title;
+    modalBody.innerHTML = renderRows(items);
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }}
+
+  function closeSkillUsageModal() {{
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }}
+
+  document.querySelectorAll('.skill-item[data-child-usage]').forEach((card) => {{
+    if (!card.dataset.childUsage || card.dataset.childUsage === '[]') return;
+    card.addEventListener('click', (event) => {{
+      if (event.target.closest('a')) return;
+      openSkillUsageModal(card);
+    }});
+  }});
+
+  closeBtn.addEventListener('click', closeSkillUsageModal);
+  modal.addEventListener('click', (event) => {{
+    if (event.target === modal) closeSkillUsageModal();
+  }});
+  document.addEventListener('keydown', (event) => {{
+    if (event.key === 'Escape' && modal.classList.contains('open')) {{
+      closeSkillUsageModal();
+    }}
+  }});
+}})();
 </script>
 </body>
 </html>"""
