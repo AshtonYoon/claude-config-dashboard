@@ -572,6 +572,33 @@ def enrich_data(raw: dict, usage: dict) -> dict:
     }
 
 
+def build_project_only_data(home_raw: dict, project_raw: dict) -> dict:
+    home_skill_slugs = {item["slug"] for item in home_raw["skills"]}
+    home_command_slashes = {item["slash"] for item in home_raw["commands"]}
+    home_mcp_names = {item["name"] for item in home_raw["mcp_servers"]}
+    home_hooks = {(item["trigger"], item["matcher"], item["command"]) for item in home_raw["hooks"]}
+    home_rule_names = {file["name"] for rule in home_raw["rules"] for file in rule.get("files", [])}
+
+    project_only_rules = []
+    for rule in project_raw["rules"]:
+        files = [file for file in rule.get("files", []) if file["name"] not in home_rule_names]
+        if files:
+            project_only_rules.append({**rule, "files": files})
+
+    return {
+        "plugins": [],
+        "agents": [],
+        "skills": [item for item in project_raw["skills"] if item["slug"] not in home_skill_slugs],
+        "commands": [item for item in project_raw["commands"] if item["slash"] not in home_command_slashes],
+        "hooks": [
+            item for item in project_raw["hooks"]
+            if (item["trigger"], item["matcher"], item["command"]) not in home_hooks
+        ],
+        "mcp_servers": [item for item in project_raw["mcp_servers"] if item["name"] not in home_mcp_names],
+        "rules": project_only_rules,
+    }
+
+
 # ─── HTML Helpers ─────────────────────────────────────────────────────────────
 
 def _e(s: str) -> str:
@@ -595,10 +622,17 @@ def _sort_bar(grid_id: str, default: str = "name") -> str:
     )
     return f'<div class="sort-bar">{btns}</div>'
 
-def _tab_btns() -> str:
-    tabs = [("plugins", "Plugins"), ("agents", "Agents"), ("skills", "Skills"),
-            ("commands", "Commands"), ("hooks", "Hooks"), ("mcp", "MCP Servers"),
-            ("rules", "Rules"), ("cleanup", "Cleanup")]
+def _tab_btns(selected_dir: str) -> str:
+    if selected_dir == "project-only":
+        tabs = [
+            ("mcp", "Project MCP"), ("skills", "Project Skills"),
+            ("commands", "Project Commands"), ("hooks", "Project Hooks"),
+            ("rules", "Project Rules")
+        ]
+    else:
+        tabs = [("plugins", "Plugins"), ("agents", "Agents"), ("skills", "Skills"),
+                ("commands", "Commands"), ("hooks", "Hooks"), ("mcp", "MCP Servers"),
+                ("rules", "Rules"), ("cleanup", "Cleanup")]
     return "".join(
         f'<button class="tab-btn" onclick="showTab(\'{t}\')" id="btn-{t}">{label}</button>'
         for t, label in tabs
@@ -618,14 +652,12 @@ def _stats_header(items: list) -> str:
     return "".join(parts)
 
 def _dir_selector(selected_dir: str) -> str:
-    """Toggle between ~/.claude (home) and cwd/.claude (cwd), if both exist."""
+    """Toggle between ~/.claude and the project-only comparison view."""
     if CWD_CLAUDE is None:
         return ""
-    home_label = "~/.claude"
-    cwd_label = "~/" + str(CWD_CLAUDE.relative_to(Path.home()))
     options = [
-        f'<option value="home"{"  selected" if selected_dir == "home" else ""}>{_e(home_label)}</option>',
-        f'<option value="cwd"{"  selected" if selected_dir == "cwd" else ""}>{_e(cwd_label)}</option>',
+        f'<option value="home"{"  selected" if selected_dir == "home" else ""}>{_e("~/.claude")}</option>',
+        f'<option value="project-only"{"  selected" if selected_dir == "project-only" else ""}>{_e("Project-only config")}</option>',
     ]
     return (
         f'<select class="dir-select" onchange="window.location=\'/?dir=\'+this.value">'
@@ -701,10 +733,10 @@ def render_agents(agents: list) -> str:
     return "".join(parts)
 
 
-def render_skills(skills: list) -> str:
+def render_skills(skills: list, show_usage: bool = True) -> str:
     never_count = sum(1 for s in skills if not s.get("last_used", ""))
-    summary = f'<span class="badge badge-red">{never_count} never used</span>' if never_count else ""
-    sort_bar = _sort_bar("skills-grid")
+    summary = f'<span class="badge badge-red">{never_count} never used</span>' if show_usage and never_count else ""
+    sort_bar = _sort_bar("skills-grid", "name") if show_usage else ""
     cards = []
     for s in skills:
         name = _e(s["name"])
@@ -714,7 +746,7 @@ def render_skills(skills: list) -> str:
         is_sym = s.get("is_symlink", False)
         last_iso = _e(s.get("last_used", ""))
         count = s.get("usage_count", 0)
-        child_usage = s.get("child_usage", [])
+        child_usage = s.get("child_usage", []) if show_usage else []
         child_usage_json = _e(json.dumps(child_usage, separators=(",", ":")))
         clickable = bool(child_usage)
 
@@ -727,7 +759,7 @@ def render_skills(skills: list) -> str:
         if is_sym:
             badge += ' <span class="badge source-symlink">symlink</span>'
 
-        usage_badge = _usage_html({"count": count, "last_used": s.get("last_used", "")})
+        usage_badge = _usage_html({"count": count, "last_used": s.get("last_used", "")}) if show_usage else ""
         title = (_open_link(f'<span style="font-weight:500;font-size:14px" class="al">{name}</span>', path)
                  if path else f'<span style="font-weight:500;font-size:14px;color:var(--text-p)">{name}</span>')
         desc_html = f'<p style="font-size:12px;color:var(--text-s)">{desc}</p>' if desc else ""
@@ -742,11 +774,13 @@ def render_skills(skills: list) -> str:
             f'<div class="flex gap-1 ml-2">{badge}</div></div>'
             f'{desc_html}{usage_html}{click_badge}</div>'
         )
-    header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>'
+    header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>' if (sort_bar or summary) else ""
     return f'{header}<div id="skills-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">{"".join(cards)}</div>'
 
 
 def render_commands(commands: list) -> str:
+    if not commands:
+        return '<tr><td colspan="2" style="color:var(--text-t);text-align:center;padding:32px">No project-only commands found.</td></tr>'
     rows = []
     for c in commands:
         slash = _e(c["slash"])
@@ -782,13 +816,13 @@ def render_hooks(hooks: list) -> str:
     return "".join(parts)
 
 
-def render_mcp(servers: list) -> str:
+def render_mcp(servers: list, show_usage: bool = True, empty_message: str = "No MCP servers configured") -> str:
     if not servers:
-        return '<div style="color:var(--text-t);font-size:14px;padding:32px;text-align:center">No MCP servers configured</div>'
+        return f'<div style="color:var(--text-t);font-size:14px;padding:32px;text-align:center">{_e(empty_message)}</div>'
     never_count = sum(1 for s in servers if not s.get("last_used", ""))
-    summary = f'<span class="badge badge-red">{never_count} never used</span>' if never_count else ""
-    sort_bar = _sort_bar("mcp-grid")
-    header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>'
+    summary = f'<span class="badge badge-red">{never_count} never used</span>' if show_usage and never_count else ""
+    sort_bar = _sort_bar("mcp-grid") if show_usage else ""
+    header = f'<div class="flex items-center justify-between mb-3">{sort_bar}{summary}</div>' if (sort_bar or summary) else ""
     cards = []
     for s in servers:
         args = " ".join(_e(str(a)) for a in s.get("args", [])[:4])
@@ -797,7 +831,7 @@ def render_mcp(servers: list) -> str:
         src = _e(s.get("source", ""))
         last_iso = _e(s.get("last_used", ""))
         count = s.get("usage_count", 0)
-        usage_badge = _usage_html({"count": count, "last_used": s.get("last_used", "")})
+        usage_badge = _usage_html({"count": count, "last_used": s.get("last_used", "")}) if show_usage else ""
         src_badge = f'<span class="badge badge-gray">{src}</span>' if src else ""
         cards.append(
             f'<div class="card" data-name="{_e(s["name"].lower())}" data-count="{count}" data-last="{last_iso}">'
@@ -884,13 +918,90 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     p, ag, sk, co, ho, mc, ru = (data["plugins"], data["agents"], data["skills"],
         data["commands"], data["hooks"], data["mcp_servers"], data["rules"])
-    n_cats = len({a["category"] for a in ag})
+    n_cats = len({a["category"] for a in ag}) if ag else 0
     agents_never = sum(1 for a in ag if not a.get("last_used", ""))
     skills_never = sum(1 for s in sk if not s.get("last_used", ""))
     mcp_never    = sum(1 for m in mc if not m.get("last_used", ""))
+    is_project_only = selected_dir == "project-only"
 
-    dir_label = str(claude_dir).replace(str(Path.home()), "~")
+    if is_project_only:
+        dir_label = "Project-only config"
+        commands_note = "Only commands found in this project-local .claude directory"
+        mcp_html = render_mcp(mc, show_usage=False, empty_message="No project-only MCP servers found.")
+        skills_html = render_skills(sk, show_usage=False)
+        commands_html = render_commands(co)
+        hooks_html = render_hooks(ho) if ho else '<div style="color:var(--text-t);font-size:14px;padding:32px;text-align:center">No project-only hooks found.</div>'
+        rules_html = (
+            '<p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click filename to open in default app</p>'
+            + f'<div class="grid grid-cols-1 md:grid-cols-2 gap-4">{render_rules(ru)}</div>'
+            if ru else '<div style="color:var(--text-t);font-size:14px;padding:32px;text-align:center">No project-only rules found.</div>'
+        )
+        project_empty = not mc and not sk and not co and not ho and not ru
+        project_intro = (
+            '<div style="background:rgba(201,100,66,.07);border:1px solid rgba(201,100,66,.18);border-radius:8px;padding:14px 18px;margin-bottom:20px">'
+            '<p style="font-weight:500;color:var(--text-p);font-size:14px">Only in this project</p>'
+            '<p style="font-size:12px;color:var(--text-s);margin-top:4px">This view compares the current project\'s <code>.claude</code> with <code>~/.claude</code> and shows only project-specific MCP servers, skills, commands, hooks, and rules.</p>'
+            '</div>'
+        )
+        if project_empty:
+            project_intro += '<div style="color:var(--text-t);font-size:14px;padding:32px 0;text-align:center">No project-only MCP servers, skills, commands, hooks, or rules found.</div>'
+    else:
+        dir_label = str(claude_dir).replace(str(Path.home()), "~")
+        commands_note = "Click command to open in default app"
+        mcp_html = render_mcp(mc)
+        skills_html = render_skills(sk)
+        commands_html = render_commands(co)
+        hooks_html = render_hooks(ho)
+        rules_html = '<p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click filename to open in default app</p>' + f'<div class="grid grid-cols-1 md:grid-cols-2 gap-4">{render_rules(ru)}</div>'
+        project_intro = ""
+
     dir_sel = _dir_selector(selected_dir)
+    nav_stats = (
+        _stats_header([
+            (len(sk), "Skills", 0), (len(co), "Commands", 0), (len(mc), "MCP", 0),
+            (len(ho), "Hooks", 0), (sum(len(rule.get("files", [])) for rule in ru), "Rules", 0),
+        ])
+        if is_project_only else
+        _stats_header([
+            (len(p), "Plugins", 0), (len(ag), "Agents", agents_never),
+            (len(sk), "Skills", skills_never), (len(co), "Commands", 0),
+            (len(ho), "Hooks", 0), (len(mc), "MCP", mcp_never),
+        ])
+    )
+    pre_tabs_html = ""
+    post_tabs_html = ""
+    if not is_project_only:
+        pre_tabs_html = f'''<div id="tab-plugins" class="tab-content">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{render_plugins(p)}</div>
+</div>
+
+<div id="tab-agents" class="tab-content">
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">{len(ag)} agents · {n_cats} categories · Click name to open
+  {' · <span style="color:#b53333;font-weight:500">' + str(agents_never) + ' never used</span>' if agents_never else ''}
+  </p>
+  {render_agents(ag)}
+</div>'''
+        post_tabs_html = f'''<div id="tab-hooks" class="tab-content">
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click command to open script file</p>
+  <div class="space-y-3">{hooks_html}</div>
+</div>
+
+<div id="tab-rules" class="tab-content">
+  {rules_html}
+</div>
+
+<div id="tab-cleanup" class="tab-content">
+  {render_cleanup(ag, sk, mc)}
+</div>'''
+    else:
+        post_tabs_html = f'''<div id="tab-hooks" class="tab-content">
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Only hooks found in this project-local .claude directory</p>
+  <div class="space-y-3">{hooks_html}</div>
+</div>
+
+<div id="tab-rules" class="tab-content">
+  {rules_html}
+</div>'''
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1063,62 +1174,37 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
   </div>
   <div style="flex:1"></div>
   <div style="display:flex;gap:20px;align-items:center">
-    {_stats_header([
-        (len(p),"Plugins",0),(len(ag),"Agents",agents_never),
-        (len(sk),"Skills",skills_never),(len(co),"Commands",0),
-        (len(ho),"Hooks",0),(len(mc),"MCP",mcp_never),
-    ])}
+    {nav_stats}
     {f'<div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end"><span style="font-size:10px;color:rgba(255,255,255,.38);text-transform:uppercase;letter-spacing:.06em">Config dir</span>{dir_sel}</div>' if dir_sel else ""}
     <button class="stop-btn" onclick="fetch('/stop').then(()=>window.close())">Stop server</button>
   </div>
 </nav>
 
-<div class="tab-bar">{_tab_btns()}</div>
+<div class="tab-bar">{_tab_btns(selected_dir)}</div>
 
 <div class="content">
-
-<div id="tab-plugins" class="tab-content">
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{render_plugins(p)}</div>
-</div>
-
-<div id="tab-agents" class="tab-content">
-  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">{len(ag)} agents · {n_cats} categories · Click name to open
-  {f' · <span style="color:#b53333;font-weight:500">{agents_never} never used</span>' if agents_never else ''}
-  </p>
-  {render_agents(ag)}
-</div>
+{project_intro}
+{pre_tabs_html}
 
 <div id="tab-skills" class="tab-content">
-  {render_skills(sk)}
+  {skills_html}
 </div>
 
 <div id="tab-commands" class="tab-content">
-  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click command to open in default app</p>
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">{commands_note}</p>
   <div style="border-radius:8px;overflow:hidden">
     <table class="at">
       <thead><tr><th>Command</th><th>Description</th></tr></thead>
-      <tbody>{render_commands(co)}</tbody>
+      <tbody>{commands_html}</tbody>
     </table>
   </div>
 </div>
 
-<div id="tab-hooks" class="tab-content">
-  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click command to open script file</p>
-  <div class="space-y-3">{render_hooks(ho)}</div>
-</div>
-
 <div id="tab-mcp" class="tab-content">
-  {render_mcp(mc)}
+  {mcp_html}
 </div>
 
-<div id="tab-rules" class="tab-content">
-  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click filename to open in default app</p>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">{render_rules(ru)}</div>
-</div>
-
-<div id="tab-cleanup" class="tab-content">
-  {render_cleanup(ag, sk, mc)}
-</div>
+{post_tabs_html}
 
 </div>
 
@@ -1173,7 +1259,7 @@ function showTab(name) {{
   document.getElementById('btn-' + name).classList.add('active');
   localStorage.setItem('claude-dash-tab', name);
 }}
-showTab(localStorage.getItem('claude-dash-tab') || 'plugins');
+showTab(localStorage.getItem('claude-dash-tab') || (document.getElementById('tab-plugins') ? 'plugins' : 'mcp'));
 
 function openFile(encodedPath) {{
   fetch('/open?path=' + encodedPath).catch(() => {{}});
@@ -1334,9 +1420,14 @@ def make_handler(all_data: dict, server_ref: list):
                 selected_dir = qs.get("dir", ["home"])[0]
                 if selected_dir not in all_data:
                     selected_dir = "home"
-                raw_data, claude_dir = all_data[selected_dir]
                 usage = get_cached_usage("*")
-                data = enrich_data(raw_data, usage)
+                if selected_dir == "project-only":
+                    raw_data = build_project_only_data(all_data["home"][0], all_data["project-only"][0])
+                    claude_dir = all_data["project-only"][1]
+                    data = enrich_data(raw_data, {"skills": {}, "agents": {}, "mcp": {}})
+                else:
+                    raw_data, claude_dir = all_data[selected_dir]
+                    data = enrich_data(raw_data, usage)
                 html = build_html(data, claude_dir, selected_dir)
                 self._respond(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
@@ -1403,7 +1494,7 @@ def main():
         for k, v in cwd_data.items():
             if isinstance(v, list):
                 print(f"  {k:<12}: {len(v)}")
-        all_data["cwd"] = (cwd_data, CWD_CLAUDE)
+        all_data["project-only"] = (cwd_data, CWD_CLAUDE)
 
     # Usage stats always read from HOME_CLAUDE (that's where the logs live)
     global CLAUDE_DIR

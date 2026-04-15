@@ -1,6 +1,6 @@
 # claude-config-dashboard
 
-A Claude Code plugin that provides a local web dashboard for visualizing all third-party elements installed in `~/.claude`.
+A Claude Code plugin that provides a local web dashboard for visualizing third-party elements installed in `~/.claude`, plus a project-only comparison view for items found only in the current project's `.claude`.
 
 <img width="3476" height="1648" alt="image" src="https://github.com/user-attachments/assets/ce37b47e-84f8-4904-ba38-51484ba21362" />
 
@@ -34,6 +34,7 @@ The dashboard opens at **http://localhost:9876**.
 | Hooks | Hook scripts by trigger type — click to open script |
 | MCP Servers | Configured MCP servers from settings.json and ~/.claude.json |
 | Rules | Rule files by category — click to open file |
+| Project-only config | MCP servers, skills, commands, hooks, and rules that exist only in the current project's `.claude` |
 
 Clicking any file name opens it in the OS default app (editor, Finder, etc.).
 

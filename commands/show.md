@@ -1,5 +1,5 @@
 ---
-description: Start the Claude Config Dashboard — a local web UI showing all installed plugins, agents, skills, commands, hooks, and MCP servers in ~/.claude. File names are clickable to open in the default app.
+description: Start the Claude Config Dashboard — a local web UI showing installed Claude config from ~/.claude plus a project-only comparison view for MCP servers, skills, commands, hooks, and rules found only in the current project's .claude. File names are clickable to open in the default app.
 allowed-tools: Bash
 ---
 
