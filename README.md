@@ -2,7 +2,8 @@
 
 A Claude Code plugin that provides a local web dashboard for visualizing third-party elements installed in `~/.claude`, plus a project-only comparison view for items found only in the current project's `.claude`.
 
-<img width="3476" height="1648" alt="image" src="https://github.com/user-attachments/assets/ce37b47e-84f8-4904-ba38-51484ba21362" />
+<img width="1755" height="899" alt="image" src="https://github.com/user-attachments/assets/f0332b7b-ad5f-4c2c-b73b-4054d6da2a24" />
+
 
 
 
