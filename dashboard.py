@@ -3,17 +3,21 @@
 Claude Config Dashboard
 Starts a local HTTP server and opens the dashboard in the browser.
 
-  /                → serves the dashboard HTML (global scope)
-  /?project=/path  → serves dashboard scoped to a specific project
-  /open?path=      → opens the file with the OS default app
+  /                    → serves the dashboard HTML (?dir=home|project-only)
+  /character           → mascot image
+  POST /open?path=     → opens a rendered file with the OS default app
+                         (requires X-Dashboard-Token; path allowlisted)
+  POST /stop           → shuts the server down (requires X-Dashboard-Token)
 
-Usage: python3 dashboard.py [--port 9876] [--project /path/to/project]
+Usage: python3 dashboard.py [--port 9876] [--no-open]
 """
 
 import argparse
 import glob as glob_mod
+import hmac
 import json
 import os
+import secrets
 import subprocess
 import sys
 import threading
@@ -27,6 +31,12 @@ _cwd_path = Path.cwd() / ".claude"
 CWD_CLAUDE = _cwd_path if (_cwd_path.is_dir() and _cwd_path.resolve() != HOME_CLAUDE.resolve()) else None
 CLAUDE_DIR = HOME_CLAUDE  # mutable global used by collectors; set before each collection
 PORT_DEFAULT = 9876
+
+# Per-run CSRF token: required on state-changing endpoints (/open, /stop).
+# Embedded in the served HTML; other origins cannot read it.
+_SESSION_TOKEN = secrets.token_urlsafe(32)
+# Only paths actually rendered as clickable links may be opened via /open.
+_OPENABLE_PATHS: set = set()
 
 # Claude character mascot image — served at /character
 _CHARACTER_IMG = Path(__file__).parent / "character.png"
@@ -607,6 +617,7 @@ def _e(s: str) -> str:
 def _open_link(label: str, path: str, cls: str = "") -> str:
     if not path:
         return f'<span class="{cls}">{label}</span>'
+    _OPENABLE_PATHS.add(str(Path(path).expanduser().resolve()))
     enc = urllib.parse.quote(path, safe="")
     return (
         f'<a onclick="openFile(\'{enc}\')" class="{cls} hover:underline cursor-pointer"'
@@ -1176,7 +1187,7 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
   <div style="display:flex;gap:20px;align-items:center">
     {nav_stats}
     {f'<div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end"><span style="font-size:10px;color:rgba(255,255,255,.38);text-transform:uppercase;letter-spacing:.06em">Config dir</span>{dir_sel}</div>' if dir_sel else ""}
-    <button class="stop-btn" onclick="fetch('/stop').then(()=>window.close())">Stop server</button>
+    <button class="stop-btn" onclick="stopServer()">Stop server</button>
   </div>
 </nav>
 
@@ -1261,8 +1272,20 @@ function showTab(name) {{
 }}
 showTab(localStorage.getItem('claude-dash-tab') || (document.getElementById('tab-plugins') ? 'plugins' : 'mcp'));
 
+const DASH_TOKEN = '{_SESSION_TOKEN}';
+
 function openFile(encodedPath) {{
-  fetch('/open?path=' + encodedPath).catch(() => {{}});
+  fetch('/open?path=' + encodedPath, {{
+    method: 'POST',
+    headers: {{'X-Dashboard-Token': DASH_TOKEN}},
+  }}).catch(() => {{}});
+}}
+
+function stopServer() {{
+  fetch('/stop', {{
+    method: 'POST',
+    headers: {{'X-Dashboard-Token': DASH_TOKEN}},
+  }}).then(() => window.close()).catch(() => {{}});
 }}
 
 function sortGrid(gridId, key, btn) {{
@@ -1399,21 +1422,8 @@ def make_handler(all_data: dict, server_ref: list):
                 else:
                     self._respond(404, b"not found", "text/plain")
 
-            elif parsed.path == "/open":
-                qs = urllib.parse.parse_qs(parsed.query)
-                path = qs.get("path", [""])[0]
-                if path and Path(path).exists():
-                    if sys.platform == "darwin":
-                        subprocess.run(["open", path], check=False)
-                    elif sys.platform.startswith("linux"):
-                        subprocess.run(["xdg-open", path], check=False)
-                    else:
-                        os.startfile(path)
-                self._respond(200, b"ok", "text/plain")
-
-            elif parsed.path == "/stop":
-                self._respond(200, b"stopping", "text/plain")
-                threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
+            elif parsed.path in ("/open", "/stop"):
+                self._respond(405, b"method not allowed", "text/plain")
 
             elif parsed.path in ("/", "/index.html"):
                 qs = urllib.parse.parse_qs(parsed.query)
@@ -1433,6 +1443,44 @@ def make_handler(all_data: dict, server_ref: list):
 
             else:
                 self._respond(404, b"not found", "text/plain")
+
+        def do_POST(self):
+            parsed = urllib.parse.urlparse(self.path)
+
+            if parsed.path not in ("/open", "/stop"):
+                self._respond(404, b"not found", "text/plain")
+                return
+            if not self._authorized():
+                self._respond(403, b"forbidden", "text/plain")
+                return
+
+            if parsed.path == "/open":
+                qs = urllib.parse.parse_qs(parsed.query)
+                path = qs.get("path", [""])[0]
+                resolved = str(Path(path).expanduser().resolve()) if path else ""
+                if not resolved or resolved not in _OPENABLE_PATHS or not Path(resolved).exists():
+                    self._respond(403, b"forbidden", "text/plain")
+                    return
+                if sys.platform == "darwin":
+                    subprocess.run(["open", resolved], check=False)
+                elif sys.platform.startswith("linux"):
+                    subprocess.run(["xdg-open", resolved], check=False)
+                else:
+                    os.startfile(resolved)
+                self._respond(200, b"ok", "text/plain")
+
+            elif parsed.path == "/stop":
+                self._respond(200, b"stopping", "text/plain")
+                threading.Thread(target=server_ref[0].shutdown, daemon=True).start()
+
+        def _authorized(self) -> bool:
+            # Host check defeats DNS rebinding; token check defeats CSRF
+            # (other origins cannot read the token out of the served HTML).
+            host = self.headers.get("Host", "").rsplit(":", 1)[0]
+            if host not in ("localhost", "127.0.0.1"):
+                return False
+            token = self.headers.get("X-Dashboard-Token", "")
+            return hmac.compare_digest(token, _SESSION_TOKEN)
 
         def _respond(self, code: int, body: bytes, ct: str):
             self.send_response(code)
