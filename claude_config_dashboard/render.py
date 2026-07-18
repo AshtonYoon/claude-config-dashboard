@@ -9,6 +9,7 @@ from pathlib import Path
 from string import Template
 
 from . import paths, security
+from .context_tax import compute_context_tax
 from .usage import _stale_info
 
 
@@ -74,6 +75,7 @@ def _tab_btns(selected_dir: str) -> str:
             ("hooks", "Hooks"),
             ("mcp", "MCP Servers"),
             ("rules", "Rules"),
+            ("tax", "Context Tax"),
             ("cleanup", "Cleanup"),
         ]
     return "".join(
@@ -400,6 +402,92 @@ def render_cleanup(agents: list, skills: list, mcp_servers: list) -> str:
     )
 
 
+def render_context_tax(tax: dict) -> str:
+    total = tax["total_tokens"]
+    categories = tax["categories"]
+    reclaimable = tax["reclaimable_items"]
+    reclaimable_tokens = tax["reclaimable_tokens"]
+    max_cat = max((c["tokens"] for c in categories), default=0) or 1
+
+    hero = f"""<div class="card" style="text-align:center;padding:28px 16px;margin-bottom:20px">
+  <div style="font-family:Georgia,serif;font-size:44px;font-weight:500;color:var(--brand)">~{total:,}</div>
+  <div style="font-size:13px;color:var(--text-s);margin-top:4px">estimated tokens added to <strong>every session</strong> by this config</div>
+</div>"""
+
+    reclaim_html = ""
+    if reclaimable:
+        reclaim_rows = []
+        for item in reclaimable[:20]:
+            name_html = _e(item["name"])
+            if item["path"]:
+                name_html = _open_link(f'<span style="font-weight:500" class="al">{name_html}</span>', item["path"])
+            else:
+                name_html = f'<span style="font-weight:500;color:var(--text-p)">{name_html}</span>'
+            badge = _usage_html({"count": 0, "last_used": item["last_used"] or ""})
+            reclaim_rows.append(
+                f"<tr><td>{name_html}</td>"
+                f'<td><span class="badge badge-gray">{_e(item["kind"])}</span></td>'
+                f'<td style="font-family:monospace">{item["tokens"]:,}</td>'
+                f"<td>{badge}</td></tr>"
+            )
+        rows = "".join(reclaim_rows)
+        reclaim_html = f"""<div style="background:rgba(201,100,66,.07);border:1px solid rgba(201,100,66,.18);border-radius:8px;padding:14px 18px;margin-bottom:20px">
+  <p style="font-weight:500;color:#c96442;font-size:14px">~{reclaimable_tokens:,} tokens reclaimable</p>
+  <p style="font-size:12px;color:#87867f;margin-top:2px">{len(reclaimable)} skills/agents unused for {30}+ days still cost context every session</p>
+</div>
+<div style="border-radius:8px;overflow:hidden;margin-bottom:24px">
+  <table class="at">
+    <thead><tr><th>Item</th><th>Type</th><th>Est. tokens</th><th>Status</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+</div>"""
+
+    bars = "".join(
+        f"""<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+  <div style="width:110px;font-size:12px;color:var(--text-s);text-align:right">{_e(c["label"])}</div>
+  <div style="flex:1;background:rgba(0,0,0,.04);border-radius:6px;height:18px;overflow:hidden">
+    <div style="width:{max(c["tokens"] / max_cat * 100, 1):.1f}%;background:var(--brand);height:100%;border-radius:6px;opacity:.85"></div>
+  </div>
+  <div style="width:80px;font-family:monospace;font-size:12px;color:var(--text-p)">{c["tokens"]:,}</div>
+</div>"""
+        for c in categories
+    )
+    bars_html = f'<div class="card" style="margin-bottom:24px">{bars}</div>'
+
+    details = []
+    for c in categories:
+        if not c["items"]:
+            continue
+        rows = "".join(
+            f"<tr>"
+            f"<td>{_open_link(_e(i['name']), i['path'], 'al') if i['path'] else _e(i['name'])}</td>"
+            f'<td style="font-family:monospace">{i["tokens"]:,}</td>'
+            f"</tr>"
+            for i in c["items"]
+        )
+        details.append(f"""<details class="mb-4">
+  <summary class="flex items-center gap-2 py-2">
+    <span style="font-weight:600;color:var(--text-p)">{_e(c["label"])}</span>
+    <span class="badge badge-blue">{c["tokens"]:,} tokens</span>
+  </summary>
+  <div style="border-radius:8px;overflow:hidden;margin-top:8px">
+    <table class="at">
+      <thead><tr><th>Item</th><th>Est. tokens</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+</details>""")
+
+    footnote = (
+        '<p style="font-size:11px;color:var(--text-t);margin-top:16px">'
+        "Estimates use chars ÷ 4. CLAUDE.md and rules count full file content; skills, agents, and commands "
+        "count their listing line (name + description) — bodies load only on invocation. "
+        "MCP tool schemas are loaded at runtime and can't be measured statically; hooks add no context cost.</p>"
+    )
+
+    return hero + reclaim_html + bars_html + "".join(details) + footnote
+
+
 # ─── Build HTML ───────────────────────────────────────────────────────────────
 
 
@@ -502,6 +590,10 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
 
 <div id="tab-rules" class="tab-content">
   {rules_html}
+</div>
+
+<div id="tab-tax" class="tab-content">
+  {render_context_tax(compute_context_tax(claude_dir, data))}
 </div>
 
 <div id="tab-cleanup" class="tab-content">

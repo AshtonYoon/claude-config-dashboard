@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-07-19
+
+### Added
+- **Context Tax tab**: estimates how many tokens your installed config adds
+  to every Claude Code session — full content for CLAUDE.md and rules,
+  listing lines (name + description) for skills, agents, and commands, with
+  plugin bundles summing their child skills. Highlights "reclaimable"
+  tokens: items unused for 30+ days that still cost context each session.
+  Estimates use chars ÷ 4 and say so; MCP tool schemas are explicitly out
+  of scope (not statically measurable).
+
 ## [1.7.0] - 2026-07-18
 
 ### Added

@@ -92,6 +92,9 @@ def claude_env(tmp_path, monkeypatch):
     bundled.mkdir(parents=True)
     (bundled / "skill.md").write_text("---\nname: bundled-skill\ndescription: Bundled skill\n---\nBody\n")
 
+    # global CLAUDE.md (injected into every session's context)
+    (claude / "CLAUDE.md").write_text("# My rules\n\n" + ("Be concise. " * 20) + "\n")
+
     # agents
     agents = claude / "agents"
     agents.mkdir()
