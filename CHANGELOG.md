@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.7.0] - 2026-07-18
+
+### Added
+- PyPI packaging: install with `uvx claude-config-dashboard` or
+  `pip install claude-config-dashboard`; releases publish via GitHub
+  Actions Trusted Publishing on version tags.
+- Test suite (67 tests, 93% coverage) with an isolated synthetic `~/.claude`
+  fixture; coverage gate at 80%.
+- GitHub Actions CI: ruff lint/format and pytest on ubuntu/macos ×
+  Python 3.9/3.11/3.13, plus a version-sync check across the four manifests.
 
 ### Changed
 - `dashboard.py` (1,523 lines) split into the `claude_config_dashboard`
@@ -18,12 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Skills named `SKILL.md` (the documented casing) were invisible on
   case-sensitive filesystems (Linux); lookup now checks `SKILL.md` first.
-
-### Added
-- Test suite (67 tests, 93% coverage) with an isolated synthetic `~/.claude`
-  fixture; coverage gate at 80%.
-- GitHub Actions CI: ruff lint/format and pytest on ubuntu/macos ×
-  Python 3.9/3.11/3.13, plus a version-sync check across the four manifests.
 
 ## [1.6.1] - 2026-07-18
 

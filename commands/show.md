@@ -7,20 +7,23 @@ Launch the Claude Config Dashboard web server and open it in the browser.
 
 ## Steps
 
-1. Find the bundled dashboard script from the plugin cache:
-   ```bash
-   find "$HOME/.claude/plugins/cache/claude-config-dashboard" -name "dashboard.py" 2>/dev/null | sort -r | head -1
-   ```
-
-2. Check if the server is already running on port 9876:
+1. Check if the server is already running on port 9876:
    ```bash
    lsof -ti :9876
    ```
    If output is non-empty, the server is already running — skip to step 4.
 
-3. Start the server in the background using the path found in step 1:
+2. Pick a launcher, first available wins:
    ```bash
-   python3 "<path from step 1>" --no-open &
+   command -v claude-config-dashboard || command -v uvx >/dev/null && echo "uvx claude-config-dashboard" || find "$HOME/.claude/plugins/cache/claude-config-dashboard" -name "dashboard.py" 2>/dev/null | sort -r | head -1
+   ```
+   - Installed console script: `claude-config-dashboard`
+   - uvx (no install needed): `uvx claude-config-dashboard`
+   - Plugin cache fallback: `python3 "<found dashboard.py path>"`
+
+3. Start the server in the background using the launcher from step 2:
+   ```bash
+   <launcher> --no-open &
    ```
    Wait 1 second for it to start.
 
