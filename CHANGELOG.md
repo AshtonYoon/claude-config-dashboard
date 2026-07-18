@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `dashboard.py` (1,523 lines) split into the `claude_config_dashboard`
+  package (collectors / usage / enrich / render / security / server), with
+  HTML, CSS, and JS extracted to `string.Template` files. The root
+  `dashboard.py` remains as a thin launcher for the plugin command.
+- Silent `except: pass` blocks replaced with narrowed exceptions and
+  `logging`; new `--verbose` flag surfaces skipped/unreadable config files.
+
+### Fixed
+- Skills named `SKILL.md` (the documented casing) were invisible on
+  case-sensitive filesystems (Linux); lookup now checks `SKILL.md` first.
+
+### Added
+- Test suite (67 tests, 93% coverage) with an isolated synthetic `~/.claude`
+  fixture; coverage gate at 80%.
+- GitHub Actions CI: ruff lint/format and pytest on ubuntu/macos ×
+  Python 3.9/3.11/3.13, plus a version-sync check across the four manifests.
+
 ## [1.6.1] - 2026-07-18
 
 ### Security
