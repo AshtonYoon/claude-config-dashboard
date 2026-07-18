@@ -1,21 +1,21 @@
-"""Characterization tests pinning collector behavior before the package refactor."""
+"""Characterization tests pinning collector behavior (post-refactor API)."""
 
-import dashboard
+from claude_config_dashboard import collectors
 
 
 class TestLoadSettings:
     def test_returns_parsed_settings(self, claude_env):
-        settings = dashboard.load_settings()
+        settings = collectors.load_settings(claude_env.claude)
         assert "enabledPlugins" in settings
         assert settings["mcpServers"]["local-mcp"]["command"] == "npx"
 
     def test_missing_settings_returns_empty(self, empty_claude):
-        assert dashboard.load_settings() == {}
+        assert collectors.load_settings(empty_claude) == {}
 
 
 class TestFrontmatter:
     def test_parse_frontmatter(self, claude_env):
-        front = dashboard._parse_frontmatter(claude_env.claude / "agents" / "test-runner.md")
+        front = collectors._parse_frontmatter(claude_env.claude / "agents" / "test-runner.md")
         assert front == {
             "name": "test-runner",
             "description": "Runs the tests",
@@ -23,17 +23,18 @@ class TestFrontmatter:
         }
 
     def test_no_frontmatter_returns_empty(self, claude_env):
-        front = dashboard._parse_frontmatter(claude_env.claude / "commands" / "deploy.md")
+        front = collectors._parse_frontmatter(claude_env.claude / "commands" / "deploy.md")
         assert front == {}
 
     def test_first_desc_skips_frontmatter_and_headings(self, claude_env):
-        desc = dashboard._first_desc(claude_env.claude / "commands" / "deploy.md")
+        desc = collectors._first_desc(claude_env.claude / "commands" / "deploy.md")
         assert desc == "Ship the current branch."
 
 
 class TestCollectPlugins:
     def test_plugin_from_cache(self, claude_env):
-        plugins = dashboard.collect_plugins_raw(dashboard.load_settings())
+        settings = collectors.load_settings(claude_env.claude)
+        plugins = collectors.collect_plugins_raw(claude_env.claude, settings)
         assert len(plugins) == 1
         p = plugins[0]
         assert p["name"] == "my-plugin"
@@ -47,12 +48,12 @@ class TestCollectPlugins:
         assert p["installed_at"]  # mtime-derived date
 
     def test_no_settings_no_plugins(self, empty_claude):
-        assert dashboard.collect_plugins_raw({}) == []
+        assert collectors.collect_plugins_raw(empty_claude, {}) == []
 
 
 class TestCollectAgents:
     def test_agent_fields(self, claude_env):
-        agents = dashboard.collect_agents_raw()
+        agents = collectors.collect_agents_raw(claude_env.claude)
         assert [a["slug"] for a in agents] == ["test-runner"]
         a = agents[0]
         assert a["name"] == "test-runner"
@@ -62,18 +63,19 @@ class TestCollectAgents:
         assert a["path"].endswith("test-runner.md")
 
     def test_missing_dir(self, empty_claude):
-        assert dashboard.collect_agents_raw() == []
+        assert collectors.collect_agents_raw(empty_claude) == []
 
 
 class TestCollectSkills:
     def test_custom_and_plugin_skills(self, claude_env):
-        skills = dashboard.collect_skills_raw()
+        skills = collectors.collect_skills_raw(claude_env.claude)
         by_slug = {s["slug"]: s for s in skills}
         assert set(by_slug) == {"my-skill", "single-file", "my-plugin"}
 
         assert by_slug["my-skill"]["source"] == "custom"
         assert by_slug["my-skill"]["description"] == "Does a thing"
-        assert by_slug["my-skill"]["path"].endswith("skill.md")
+        # case-insensitive: SKILL.md is checked first and macOS matches either case
+        assert by_slug["my-skill"]["path"].lower().endswith("skill.md")
 
         assert by_slug["single-file"]["source"] == "custom"
 
@@ -83,13 +85,25 @@ class TestCollectSkills:
         assert bundle["plugin_namespace"] == "my-plugin"
         assert bundle["path"].endswith("skills")
 
+    def test_uppercase_skill_md_found(self, claude_env):
+        # Real skills ship SKILL.md; must be found on case-sensitive filesystems
+        d = claude_env.claude / "skills" / "upper-skill"
+        d.mkdir()
+        (d / "SKILL.md").write_text(
+            "---\nname: upper-skill\ndescription: Uppercase file\n---\nBody\n"
+        )
+        skills = collectors.collect_skills_raw(claude_env.claude)
+        upper = next(s for s in skills if s["slug"] == "upper-skill")
+        assert upper["description"] == "Uppercase file"
+        assert upper["path"].endswith("SKILL.md")
+
     def test_missing_dirs(self, empty_claude):
-        assert dashboard.collect_skills_raw() == []
+        assert collectors.collect_skills_raw(empty_claude) == []
 
 
 class TestCollectCommands:
     def test_top_level_and_agent_prompts(self, claude_env):
-        cmds = dashboard.collect_commands()
+        cmds = collectors.collect_commands(claude_env.claude)
         assert [(c["name"], c["slash"]) for c in cmds] == [
             ("deploy", "/deploy"),
             ("scan", "/agent_prompts/scan"),
@@ -97,12 +111,12 @@ class TestCollectCommands:
         assert cmds[0]["description"] == "Ship the current branch."
 
     def test_missing_dir(self, empty_claude):
-        assert dashboard.collect_commands() == []
+        assert collectors.collect_commands(empty_claude) == []
 
 
 class TestCollectHooks:
     def test_hook_with_resolvable_script(self, claude_env):
-        hooks = dashboard.collect_hooks(dashboard.load_settings())
+        hooks = collectors.collect_hooks(collectors.load_settings(claude_env.claude))
         assert len(hooks) == 1
         h = hooks[0]
         assert h["trigger"] == "PreToolUse"
@@ -110,12 +124,13 @@ class TestCollectHooks:
         assert h["path"] == str(claude_env.hook_script)
 
     def test_empty_settings(self, empty_claude):
-        assert dashboard.collect_hooks({}) == []
+        assert collectors.collect_hooks({}) == []
 
 
 class TestCollectMcpServers:
     def test_merges_settings_and_claude_json(self, claude_env):
-        servers = dashboard.collect_mcp_servers_raw(dashboard.load_settings())
+        settings = collectors.load_settings(claude_env.claude)
+        servers = collectors.collect_mcp_servers_raw(settings)
         by_name = {s["name"]: s for s in servers}
         assert set(by_name) == {"local-mcp", "json-mcp"}
         # settings.json wins over ~/.claude.json for duplicate names
@@ -124,15 +139,25 @@ class TestCollectMcpServers:
         assert by_name["json-mcp"]["source"] == "~/.claude.json"
 
     def test_empty(self, empty_claude):
-        assert dashboard.collect_mcp_servers_raw({}) == []
+        assert collectors.collect_mcp_servers_raw({}) == []
 
 
 class TestCollectRules:
     def test_rules_grouped_by_category(self, claude_env):
-        rules = dashboard.collect_rules()
+        rules = collectors.collect_rules(claude_env.claude)
         assert len(rules) == 1
         assert rules[0]["category"] == "common"
         assert [f["name"] for f in rules[0]["files"]] == ["style.md"]
 
     def test_missing_dir(self, empty_claude):
-        assert dashboard.collect_rules() == []
+        assert collectors.collect_rules(empty_claude) == []
+
+
+class TestScanDir:
+    def test_scan_dir_collects_everything(self, claude_env):
+        data = collectors.scan_dir(claude_env.claude)
+        assert set(data) == {
+            "plugins", "agents", "skills", "commands", "hooks", "mcp_servers", "rules",
+        }
+        assert len(data["plugins"]) == 1
+        assert len(data["agents"]) == 1

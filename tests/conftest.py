@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
 
-import dashboard
+from claude_config_dashboard import security, usage
 
 
 def _iso(days_ago: float) -> str:
@@ -145,9 +145,8 @@ def claude_env(tmp_path, monkeypatch):
     ]))
 
     monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.setattr(dashboard, "CLAUDE_DIR", claude)
-    monkeypatch.setattr(dashboard, "_usage_cache", {})
-    monkeypatch.setattr(dashboard, "_OPENABLE_PATHS", set())
+    monkeypatch.setattr(usage, "_usage_cache", {})
+    monkeypatch.setattr(security, "OPENABLE_PATHS", set())
 
     return SimpleNamespace(
         home=home,
@@ -165,6 +164,5 @@ def empty_claude(tmp_path, monkeypatch):
     claude = home / ".claude"
     claude.mkdir(parents=True)
     monkeypatch.setattr(Path, "home", lambda: home)
-    monkeypatch.setattr(dashboard, "CLAUDE_DIR", claude)
-    monkeypatch.setattr(dashboard, "_usage_cache", {})
+    monkeypatch.setattr(usage, "_usage_cache", {})
     return claude

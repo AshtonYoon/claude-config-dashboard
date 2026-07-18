@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-import dashboard
+from claude_config_dashboard import enrich, render
 
 
 class ProjectOnlyDataTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class ProjectOnlyDataTests(unittest.TestCase):
             ],
         }
 
-        data = dashboard.build_project_only_data(home, project)
+        data = enrich.build_project_only_data(home, project)
 
         self.assertEqual([item["slug"] for item in data["skills"]], ["project-skill"])
         self.assertEqual([item["slash"] for item in data["commands"]], ["/project-only"])
@@ -69,7 +69,7 @@ class ProjectOnlyDataTests(unittest.TestCase):
             "rules": [],
         }
 
-        html = dashboard.build_html(data, Path('/tmp/project/.claude'), 'project-only')
+        html = render.build_html(data, Path('/tmp/project/.claude'), 'project-only')
 
         self.assertIn('Project-only config', html)
         self.assertIn('No project-only MCP servers, skills, commands, hooks, or rules found.', html)

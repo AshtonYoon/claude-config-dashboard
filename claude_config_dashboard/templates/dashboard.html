@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Config Dashboard · $title_label</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+$styles
+</style>
+</head>
+<body>
+
+<div class="float-layer" id="float-layer"></div>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-title">Claude Config Dashboard</div>
+    <div class="nav-sub">$dir_label &middot; $now</div>
+  </div>
+  <div style="flex:1"></div>
+  <div style="display:flex;gap:20px;align-items:center">
+    $nav_stats
+    $config_dir_block
+    <button class="stop-btn" onclick="stopServer()">Stop server</button>
+  </div>
+</nav>
+
+<div class="tab-bar">$tab_btns</div>
+
+<div class="content">
+$project_intro
+$pre_tabs_html
+
+<div id="tab-skills" class="tab-content">
+  $skills_html
+</div>
+
+<div id="tab-commands" class="tab-content">
+  <p style="font-size:12px;color:var(--text-t);margin-bottom:12px">$commands_note</p>
+  <div style="border-radius:8px;overflow:hidden">
+    <table class="at">
+      <thead><tr><th>Command</th><th>Description</th></tr></thead>
+      <tbody>$commands_html</tbody>
+    </table>
+  </div>
+</div>
+
+<div id="tab-mcp" class="tab-content">
+  $mcp_html
+</div>
+
+$post_tabs_html
+
+</div>
+
+<div id="skill-usage-modal" class="modal-backdrop" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="skill-usage-modal-title">
+    <div class="modal-head">
+      <div>
+        <div style="font-size:11px;color:var(--text-t);text-transform:uppercase;letter-spacing:.06em">Plugin skill usage</div>
+        <h2 id="skill-usage-modal-title" style="margin:0;font-size:18px;font-weight:600;color:var(--text-p)"></h2>
+      </div>
+      <button type="button" class="modal-close" id="skill-usage-modal-close">Close</button>
+    </div>
+    <div class="modal-body" id="skill-usage-modal-body"></div>
+  </div>
+</div>
+
+<script>
+$app_js
+</script>
+</body>
+</html>
