@@ -6,9 +6,7 @@ from claude_config_dashboard import usage
 
 
 def _iso(days_ago: float) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime(
-        "%Y-%m-%dT%H:%M:%S.000Z"
-    )
+    return (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 class TestCollectUsageStats:
@@ -54,7 +52,9 @@ class TestCollectUsageStats:
 
     def test_empty_claude_dir(self, empty_claude):
         assert usage.collect_usage_stats(empty_claude, "*") == {
-            "skills": {}, "agents": {}, "mcp": {},
+            "skills": {},
+            "agents": {},
+            "mcp": {},
         }
 
 
@@ -62,9 +62,7 @@ class TestGetCachedUsage:
     def test_caches_per_scope(self, claude_env, monkeypatch):
         first = usage.get_cached_usage(claude_env.claude, "*")
         calls = []
-        monkeypatch.setattr(
-            usage, "collect_usage_stats", lambda claude_dir, scope="*": calls.append(scope)
-        )
+        monkeypatch.setattr(usage, "collect_usage_stats", lambda claude_dir, scope="*": calls.append(scope))
         second = usage.get_cached_usage(claude_env.claude, "*")
         assert second is first
         assert calls == []

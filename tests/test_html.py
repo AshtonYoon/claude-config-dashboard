@@ -30,8 +30,11 @@ class TestEnrichment:
         assert mcp["json-mcp"]["usage_count"] == 0
 
     def test_plugin_bundle_child_usage(self, claude_env):
-        stats = {"skills": {"my-plugin:sub-a": {"count": 3, "last_used": "2026-01-01T00:00:00Z"}},
-                 "agents": {}, "mcp": {}}
+        stats = {
+            "skills": {"my-plugin:sub-a": {"count": 3, "last_used": "2026-01-01T00:00:00Z"}},
+            "agents": {},
+            "mcp": {},
+        }
         skills = enrich.enrich_skills(collectors.collect_skills_raw(claude_env.claude), stats)
         bundle = next(s for s in skills if s["slug"] == "my-plugin")
         assert bundle["usage_count"] == 3
@@ -49,8 +52,16 @@ class TestBuildHtml:
         for tab in ("plugins", "agents", "skills", "commands", "hooks", "mcp", "rules", "cleanup"):
             assert f"btn-{tab}" in html
         # collected items appear
-        for marker in ("My Plugin", "test-runner", "my-skill", "/deploy",
-                       "local-mcp", "json-mcp", "style.md", "PreToolUse"):
+        for marker in (
+            "My Plugin",
+            "test-runner",
+            "my-skill",
+            "/deploy",
+            "local-mcp",
+            "json-mcp",
+            "style.md",
+            "PreToolUse",
+        ):
             assert marker in html
 
     def test_security_markers(self, claude_env):
@@ -70,7 +81,7 @@ class TestBuildHtml:
 
     def test_html_escapes_descriptions(self, claude_env):
         (claude_env.claude / "agents" / "evil.md").write_text(
-            '---\nname: evil\ndescription: <script>alert(1)</script>\n---\nBody\n'
+            "---\nname: evil\ndescription: <script>alert(1)</script>\n---\nBody\n"
         )
         html = render.build_html(_home_data(claude_env), claude_env.claude, "home")
         assert "<script>alert(1)</script>" not in html

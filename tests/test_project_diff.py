@@ -37,8 +37,18 @@ class ProjectOnlyDataTests(unittest.TestCase):
                 {"name": "project-only", "slash": "/project-only", "description": "", "path": "/project/project.md"},
             ],
             "hooks": [
-                {"trigger": "PreToolUse", "matcher": "Skill", "command": "shared-hook", "path": "/project/shared-hook.sh"},
-                {"trigger": "PostToolUse", "matcher": "Agent", "command": "project-hook", "path": "/project/project-hook.sh"},
+                {
+                    "trigger": "PreToolUse",
+                    "matcher": "Skill",
+                    "command": "shared-hook",
+                    "path": "/project/shared-hook.sh",
+                },
+                {
+                    "trigger": "PostToolUse",
+                    "matcher": "Agent",
+                    "command": "project-hook",
+                    "path": "/project/project-hook.sh",
+                },
             ],
             "mcp_servers": [
                 {"name": "shared-mcp", "command": "shared", "args": [], "source": "settings.local.json"},
@@ -56,7 +66,10 @@ class ProjectOnlyDataTests(unittest.TestCase):
         self.assertEqual([item["slash"] for item in data["commands"]], ["/project-only"])
         self.assertEqual([item["name"] for item in data["mcp_servers"]], ["project-mcp"])
         self.assertEqual([item["command"] for item in data["hooks"]], ["project-hook"])
-        self.assertEqual(data["rules"], [{"category": "project", "files": [{"name": "project-only.md", "path": "/project/project-only.md"}]}])
+        self.assertEqual(
+            data["rules"],
+            [{"category": "project", "files": [{"name": "project-only.md", "path": "/project/project-only.md"}]}],
+        )
 
     def test_build_html_for_project_only_view_hides_unrelated_tabs(self):
         data = {
@@ -69,18 +82,18 @@ class ProjectOnlyDataTests(unittest.TestCase):
             "rules": [],
         }
 
-        html = render.build_html(data, Path('/tmp/project/.claude'), 'project-only')
+        html = render.build_html(data, Path("/tmp/project/.claude"), "project-only")
 
-        self.assertIn('Project-only config', html)
-        self.assertIn('No project-only MCP servers, skills, commands, hooks, or rules found.', html)
-        self.assertNotIn('btn-plugins', html)
-        self.assertNotIn('btn-agents', html)
-        self.assertIn('btn-hooks', html)
-        self.assertIn('btn-rules', html)
-        self.assertNotIn('btn-cleanup', html)
-        self.assertNotIn('Usage Count', html)
-        self.assertNotIn('Last Used', html)
+        self.assertIn("Project-only config", html)
+        self.assertIn("No project-only MCP servers, skills, commands, hooks, or rules found.", html)
+        self.assertNotIn("btn-plugins", html)
+        self.assertNotIn("btn-agents", html)
+        self.assertIn("btn-hooks", html)
+        self.assertIn("btn-rules", html)
+        self.assertNotIn("btn-cleanup", html)
+        self.assertNotIn("Usage Count", html)
+        self.assertNotIn("Last Used", html)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

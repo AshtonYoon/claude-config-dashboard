@@ -7,8 +7,14 @@ def enrich_plugins(plugins: list, usage: dict) -> list:
     for p in plugins:
         prefix = p["name"] + ":"
         count = sum(v["count"] for k, v in skill_stats.items() if k.startswith(prefix) or k == p["name"])
-        last = max((v["last_used"] for k, v in skill_stats.items()
-                    if (k.startswith(prefix) or k == p["name"]) and v["last_used"]), default="")
+        last = max(
+            (
+                v["last_used"]
+                for k, v in skill_stats.items()
+                if (k.startswith(prefix) or k == p["name"]) and v["last_used"]
+            ),
+            default="",
+        )
         result.append({**p, "usage_count": count, "last_used": last})
     return result
 
@@ -32,8 +38,9 @@ def enrich_skills(skills: list, usage: dict) -> list:
         if plugin_namespace:
             prefix = plugin_namespace + ":"
             count = sum(v["count"] for k, v in skill_stats.items() if k.startswith(prefix))
-            last = max((v["last_used"] for k, v in skill_stats.items()
-                        if k.startswith(prefix) and v["last_used"]), default="")
+            last = max(
+                (v["last_used"] for k, v in skill_stats.items() if k.startswith(prefix) and v["last_used"]), default=""
+            )
             child_usage = [
                 {
                     "name": k.removeprefix(prefix),
@@ -64,13 +71,13 @@ def enrich_mcp(servers: list, usage: dict) -> list:
 
 def enrich_data(raw: dict, usage: dict) -> dict:
     return {
-        "plugins":     enrich_plugins(raw["plugins"], usage),
-        "agents":      enrich_agents(raw["agents"], usage),
-        "skills":      enrich_skills(raw["skills"], usage),
-        "commands":    raw["commands"],
-        "hooks":       raw["hooks"],
+        "plugins": enrich_plugins(raw["plugins"], usage),
+        "agents": enrich_agents(raw["agents"], usage),
+        "skills": enrich_skills(raw["skills"], usage),
+        "commands": raw["commands"],
+        "hooks": raw["hooks"],
         "mcp_servers": enrich_mcp(raw["mcp_servers"], usage),
-        "rules":       raw["rules"],
+        "rules": raw["rules"],
     }
 
 
@@ -93,7 +100,8 @@ def build_project_only_data(home_raw: dict, project_raw: dict) -> dict:
         "skills": [item for item in project_raw["skills"] if item["slug"] not in home_skill_slugs],
         "commands": [item for item in project_raw["commands"] if item["slash"] not in home_command_slashes],
         "hooks": [
-            item for item in project_raw["hooks"]
+            item
+            for item in project_raw["hooks"]
             if (item["trigger"], item["matcher"], item["command"]) not in home_hooks
         ],
         "mcp_servers": [item for item in project_raw["mcp_servers"] if item["name"] not in home_mcp_names],

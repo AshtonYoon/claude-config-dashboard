@@ -89,9 +89,7 @@ class TestCollectSkills:
         # Real skills ship SKILL.md; must be found on case-sensitive filesystems
         d = claude_env.claude / "skills" / "upper-skill"
         d.mkdir()
-        (d / "SKILL.md").write_text(
-            "---\nname: upper-skill\ndescription: Uppercase file\n---\nBody\n"
-        )
+        (d / "SKILL.md").write_text("---\nname: upper-skill\ndescription: Uppercase file\n---\nBody\n")
         skills = collectors.collect_skills_raw(claude_env.claude)
         upper = next(s for s in skills if s["slug"] == "upper-skill")
         assert upper["description"] == "Uppercase file"
@@ -157,7 +155,13 @@ class TestScanDir:
     def test_scan_dir_collects_everything(self, claude_env):
         data = collectors.scan_dir(claude_env.claude)
         assert set(data) == {
-            "plugins", "agents", "skills", "commands", "hooks", "mcp_servers", "rules",
+            "plugins",
+            "agents",
+            "skills",
+            "commands",
+            "hooks",
+            "mcp_servers",
+            "rules",
         }
         assert len(data["plugins"]) == 1
         assert len(data["agents"]) == 1
