@@ -3,43 +3,50 @@ counts and last-used timestamps, plus staleness labelling."""
 
 import glob as glob_mod
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+# Log files may be missing, unreadable, malformed, or of the wrong shape;
+# usage parsing skips the bad entry (logging it) rather than aborting.
+_READ_ERRORS = (OSError, ValueError, AttributeError, TypeError)
 
 _usage_cache: dict = {}  # (claude_dir, project_cwd) → stats dict
 
 
 def _load_session_map(claude_dir: Path) -> dict:
     """Returns {cwd: set_of_transcript_dirs} from session_start.json."""
-    log = claude_dir / "logs" / "session_start.json"
+    log_path = claude_dir / "logs" / "session_start.json"
     cwd_to_dirs: dict = {}
-    if not log.exists():
+    if not log_path.exists():
         return cwd_to_dirs
     try:
-        for entry in json.loads(log.read_text()):
+        for entry in json.loads(log_path.read_text()):
             cwd = entry.get("cwd", "")
             tp = entry.get("transcript_path", "")
             if cwd and tp:
                 parent = str(Path(tp).parent)
                 cwd_to_dirs.setdefault(cwd, set()).add(parent)
-    except Exception:
-        pass
+    except _READ_ERRORS as exc:
+        log.debug("unreadable session_start.json at %s: %s", log_path, exc)
     return cwd_to_dirs
 
 
 def list_known_projects(claude_dir: Path) -> list:
     """Return known projects sorted by name, each with cwd and session count."""
-    log = claude_dir / "logs" / "session_start.json"
-    if not log.exists():
+    log_path = claude_dir / "logs" / "session_start.json"
+    if not log_path.exists():
         return []
     counts: dict = {}
     try:
-        for entry in json.loads(log.read_text()):
+        for entry in json.loads(log_path.read_text()):
             cwd = entry.get("cwd", "")
             if cwd:
                 counts[cwd] = counts.get(cwd, 0) + 1
-    except Exception:
-        pass
+    except _READ_ERRORS as exc:
+        log.debug("unreadable session_start.json at %s: %s", log_path, exc)
     return sorted(
         [{"cwd": cwd, "name": Path(cwd).name, "sessions": n} for cwd, n in counts.items()],
         key=lambda p: p["cwd"],
@@ -99,10 +106,10 @@ def collect_usage_stats(claude_dir: Path, project_cwd: str = "*") -> dict:
                                     parts = name.split("__", 2)
                                     if len(parts) >= 2:
                                         _update_stat(stats["mcp"], parts[1], ts)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                        except _READ_ERRORS as exc:
+                            log.debug("skipping malformed transcript line in %s: %s", path, exc)
+            except OSError as exc:
+                log.debug("cannot read transcript %s: %s", path, exc)
 
     # Supplement MCP from pre_tool_use.json (filtered by cwd when project-scoped)
     log_path = claude_dir / "logs" / "pre_tool_use.json"
@@ -119,8 +126,8 @@ def collect_usage_stats(claude_dir: Path, project_cwd: str = "*") -> dict:
                         if key not in stats["mcp"]:
                             stats["mcp"][key] = {"count": 0, "last_used": ""}
                         stats["mcp"][key]["count"] += 1
-        except Exception:
-            pass
+        except _READ_ERRORS as exc:
+            log.debug("unreadable pre_tool_use.json at %s: %s", log_path, exc)
 
     return stats
 
@@ -154,5 +161,6 @@ def _stale_info(last_used: str) -> tuple:
             return days, f"Used {days}d ago", "stale-mid"
         else:
             return days, f"Stale · {date_str}", "stale-old"
-    except Exception:
+    except ValueError as exc:
+        log.debug("unparseable timestamp %r: %s", last_used, exc)
         return None, "", ""

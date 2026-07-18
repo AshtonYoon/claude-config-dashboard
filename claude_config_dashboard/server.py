@@ -1,6 +1,7 @@
 """HTTP server: routes, request authorization, and the CLI entry point."""
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -99,10 +100,8 @@ def make_handler(all_data: dict, server_ref: list):
             if "/open" in (args[0] if args else ""):
                 path = ""
                 try:
-                    path = urllib.parse.parse_qs(
-                        urllib.parse.urlparse(args[0].split()[1]).query
-                    ).get("path", [""])[0]
-                except Exception:
+                    path = urllib.parse.parse_qs(urllib.parse.urlparse(args[0].split()[1]).query).get("path", [""])[0]
+                except (IndexError, ValueError, AttributeError):
                     pass
                 print(f"  open: {path}")
 
@@ -113,7 +112,14 @@ def main():
     parser = argparse.ArgumentParser(description="Claude Config Dashboard")
     parser.add_argument("--port", type=int, default=PORT_DEFAULT)
     parser.add_argument("--no-open", action="store_true", help="Do not auto-open browser")
+    parser.add_argument("--verbose", action="store_true", help="Log skipped/unreadable config files to stderr")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
 
     print(f"Scanning {HOME_CLAUDE} ...")
     home_data = scan_dir(HOME_CLAUDE)

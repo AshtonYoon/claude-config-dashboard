@@ -2,19 +2,33 @@
 MCP servers, and rules out of a .claude directory."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+# JSON files may be missing, unreadable, malformed, or of the wrong shape;
+# collectors skip the bad entry (logging it) rather than aborting the scan.
+_READ_ERRORS = (OSError, ValueError, AttributeError, TypeError)
 
 
 def load_settings(claude_dir: Path) -> dict:
     p = claude_dir / "settings.json"
-    return json.loads(p.read_text()) if p.exists() else {}
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError) as exc:
+        log.warning("unreadable settings.json at %s: %s", p, exc)
+        return {}
 
 
 def _parse_frontmatter(path: Path) -> dict:
     try:
         text = path.read_text(errors="replace")
-    except Exception:
+    except OSError as exc:
+        log.debug("cannot read %s: %s", path, exc)
         return {}
     if not text.startswith("---"):
         return {}
@@ -32,16 +46,20 @@ def _parse_frontmatter(path: Path) -> dict:
 def _first_desc(path: Path) -> str:
     try:
         text = path.read_text(errors="replace")
-    except Exception:
+    except OSError as exc:
+        log.debug("cannot read %s: %s", path, exc)
         return ""
     in_front = past_front = False
     for line in text.splitlines():
         s = line.strip()
         if s == "---":
             if not in_front and not past_front:
-                in_front = True; continue
+                in_front = True
+                continue
             elif in_front:
-                in_front = False; past_front = True; continue
+                in_front = False
+                past_front = True
+                continue
         if in_front:
             continue
         if s and not s.startswith("#") and not s.startswith("<!--"):
@@ -82,9 +100,16 @@ def collect_plugins_raw(claude_dir: Path, settings: dict) -> list:
                 version = latest.name
                 pkg = latest / "package.json"
                 if pkg.exists():
-                    d = json.loads(pkg.read_text())
-                    description = d.get("description", "")
-                    repo_url = repo_url or d.get("homepage", "") or d.get("repository", {}).get("url", "").replace("git+", "").replace(".git", "")
+                    try:
+                        d = json.loads(pkg.read_text())
+                        description = d.get("description", "")
+                        repo_url = (
+                            repo_url
+                            or d.get("homepage", "")
+                            or d.get("repository", {}).get("url", "").replace("git+", "").replace(".git", "")
+                        )
+                    except _READ_ERRORS as exc:
+                        log.debug("unreadable plugin package.json at %s: %s", pkg, exc)
                 for name in ("README.md", "readme.md"):
                     rp = latest / name
                     if rp.exists():
@@ -92,31 +117,42 @@ def collect_plugins_raw(claude_dir: Path, settings: dict) -> list:
                         break
                 installed_at = datetime.fromtimestamp(latest.stat().st_mtime).strftime("%Y-%m-%d")
 
-        plugins.append({
-            "label": plugin_name.replace("-", " ").title(),
-            "name": plugin_name,
-            "marketplace": marketplace,
-            "version": version,
-            "description": description,
-            "repo_url": repo_url,
-            "enabled": is_enabled,
-            "installed_at": installed_at,
-            "readme_path": readme_path,
-        })
+        plugins.append(
+            {
+                "label": plugin_name.replace("-", " ").title(),
+                "name": plugin_name,
+                "marketplace": marketplace,
+                "version": version,
+                "description": description,
+                "repo_url": repo_url,
+                "enabled": is_enabled,
+                "installed_at": installed_at,
+                "readme_path": readme_path,
+            }
+        )
     return plugins
 
 
 def _categorize_agent(name: str) -> str:
     n = name.lower()
-    if n.endswith("-pro"): return "Language Pro"
-    if any(x in n for x in ["seo-", "content-", "marketer"]): return "Content & SEO"
-    if any(x in n for x in ["cloud-", "kubernetes", "terraform", "devops", "deployment", "docker", "network"]): return "DevOps & Infra"
-    if any(x in n for x in ["database", "sql", "postgres", "mlops", "data-"]): return "Data & DB"
-    if any(x in n for x in ["security", "audit"]): return "Security"
-    if any(x in n for x in ["test", "e2e", "tdd"]): return "Testing"
-    if any(x in n for x in ["frontend", "ui-", "flutter", "mobile", "ios", "unity"]): return "Frontend & Mobile"
-    if any(x in n for x in ["customer", "sales", "hr-", "legal", "business", "quant", "risk"]): return "Business"
-    if any(x in n for x in ["ai-", "ml-", "prompt", "context", "llm"]): return "AI & ML"
+    if n.endswith("-pro"):
+        return "Language Pro"
+    if any(x in n for x in ["seo-", "content-", "marketer"]):
+        return "Content & SEO"
+    if any(x in n for x in ["cloud-", "kubernetes", "terraform", "devops", "deployment", "docker", "network"]):
+        return "DevOps & Infra"
+    if any(x in n for x in ["database", "sql", "postgres", "mlops", "data-"]):
+        return "Data & DB"
+    if any(x in n for x in ["security", "audit"]):
+        return "Security"
+    if any(x in n for x in ["test", "e2e", "tdd"]):
+        return "Testing"
+    if any(x in n for x in ["frontend", "ui-", "flutter", "mobile", "ios", "unity"]):
+        return "Frontend & Mobile"
+    if any(x in n for x in ["customer", "sales", "hr-", "legal", "business", "quant", "risk"]):
+        return "Business"
+    if any(x in n for x in ["ai-", "ml-", "prompt", "context", "llm"]):
+        return "AI & ML"
     return "General"
 
 
@@ -132,15 +168,17 @@ def collect_agents_raw(claude_dir: Path) -> list:
         name = front.get("name", md.stem)
         tools_raw = front.get("tools", "")
         tools = [t.strip() for t in tools_raw.split(",") if t.strip()]
-        agents.append({
-            "file": md.name,
-            "path": str(md),
-            "name": name or md.stem,
-            "slug": md.stem,
-            "description": front.get("description", "")[:120],
-            "tools": tools[:6],
-            "category": _categorize_agent(name or md.stem),
-        })
+        agents.append(
+            {
+                "file": md.name,
+                "path": str(md),
+                "name": name or md.stem,
+                "slug": md.stem,
+                "description": front.get("description", "")[:120],
+                "tools": tools[:6],
+                "category": _categorize_agent(name or md.stem),
+            }
+        )
     return agents
 
 
@@ -170,24 +208,28 @@ def collect_skills_raw(claude_dir: Path) -> list:
                 front = _parse_frontmatter(content_path) if content_path else {}
                 name = front.get("name", item.name)
                 desc = front.get("description", _first_desc(content_path) if content_path else "")
-                skills.append({
-                    "name": name or item.name,
-                    "slug": item.name,
-                    "description": desc[:100],
-                    "source": source,
-                    "is_symlink": item.is_symlink(),
-                    "path": str(content_path) if content_path else "",
-                })
+                skills.append(
+                    {
+                        "name": name or item.name,
+                        "slug": item.name,
+                        "description": desc[:100],
+                        "source": source,
+                        "is_symlink": item.is_symlink(),
+                        "path": str(content_path) if content_path else "",
+                    }
+                )
             elif item.suffix == ".md":
                 front = _parse_frontmatter(item)
-                skills.append({
-                    "name": front.get("name", item.stem) or item.stem,
-                    "slug": item.stem,
-                    "description": front.get("description", _first_desc(item))[:100],
-                    "source": source,
-                    "is_symlink": False,
-                    "path": str(item),
-                })
+                skills.append(
+                    {
+                        "name": front.get("name", item.stem) or item.stem,
+                        "slug": item.stem,
+                        "description": front.get("description", _first_desc(item))[:100],
+                        "source": source,
+                        "is_symlink": False,
+                        "path": str(item),
+                    }
+                )
 
     def count_skill_entries(base: Path) -> int:
         if not base.exists():
@@ -219,20 +261,23 @@ def collect_skills_raw(claude_dir: Path) -> list:
                 if pkg.exists():
                     try:
                         description = json.loads(pkg.read_text()).get("description", "")
-                    except Exception:
+                    except _READ_ERRORS as exc:
+                        log.debug("unreadable plugin package.json at %s: %s", pkg, exc)
                         description = ""
                 skill_count = count_skill_entries(skills_path)
                 if skill_count == 0:
                     continue
-                skills.append({
-                    "name": f"{plugin_dir.name} ({skill_count} skills)",
-                    "slug": plugin_dir.name,
-                    "plugin_namespace": plugin_dir.name,
-                    "description": (description or f"Skill bundle from {plugin_dir.name} plugin")[:100],
-                    "source": f"plugin:{plugin_dir.name}",
-                    "is_symlink": False,
-                    "path": str(skills_path),
-                })
+                skills.append(
+                    {
+                        "name": f"{plugin_dir.name} ({skill_count} skills)",
+                        "slug": plugin_dir.name,
+                        "plugin_namespace": plugin_dir.name,
+                        "description": (description or f"Skill bundle from {plugin_dir.name} plugin")[:100],
+                        "source": f"plugin:{plugin_dir.name}",
+                        "is_symlink": False,
+                        "path": str(skills_path),
+                    }
+                )
     return skills
 
 
@@ -246,7 +291,9 @@ def collect_commands(claude_dir: Path) -> list:
     ap = d / "agent_prompts"
     if ap.exists():
         for md in sorted(ap.glob("*.md")):
-            cmds.append({"name": md.stem, "slash": f"/agent_prompts/{md.stem}", "description": _first_desc(md), "path": str(md)})
+            cmds.append(
+                {"name": md.stem, "slash": f"/agent_prompts/{md.stem}", "description": _first_desc(md), "path": str(md)}
+            )
     return cmds
 
 
@@ -264,12 +311,14 @@ def collect_hooks(settings: dict) -> list:
                     if p.exists() and p.is_file():
                         script_path = str(p)
                         break
-                hooks.append({
-                    "trigger": trigger,
-                    "matcher": matcher or "(all tools)",
-                    "command": short_cmd,
-                    "path": script_path,
-                })
+                hooks.append(
+                    {
+                        "trigger": trigger,
+                        "matcher": matcher or "(all tools)",
+                        "command": short_cmd,
+                        "path": script_path,
+                    }
+                )
     return hooks
 
 
@@ -282,20 +331,22 @@ def collect_mcp_servers_raw(settings: dict) -> list:
             if name in seen:
                 continue
             seen.add(name)
-            servers.append({
-                "name": name,
-                "command": cfg.get("command", ""),
-                "args": cfg.get("args", []),
-                "source": source,
-            })
+            servers.append(
+                {
+                    "name": name,
+                    "command": cfg.get("command", ""),
+                    "args": cfg.get("args", []),
+                    "source": source,
+                }
+            )
 
     add(settings.get("mcpServers", {}), "settings.json")
     cj = Path.home() / ".claude.json"
     if cj.exists():
         try:
             add(json.loads(cj.read_text()).get("mcpServers", {}), "~/.claude.json")
-        except Exception:
-            pass
+        except _READ_ERRORS as exc:
+            log.debug("unreadable ~/.claude.json: %s", exc)
     return servers
 
 
@@ -305,7 +356,8 @@ def collect_rules(claude_dir: Path) -> list:
         return []
     rules = []
     for cat in sorted(rules_dir.iterdir()):
-        if not cat.is_dir() or cat.name.startswith("."): continue
+        if not cat.is_dir() or cat.name.startswith("."):
+            continue
         files = [{"name": f.name, "path": str(f)} for f in sorted(cat.glob("*.md"))]
         rules.append({"category": cat.name, "files": files})
     return rules
@@ -315,11 +367,11 @@ def scan_dir(claude_dir: Path) -> dict:
     """Collect every config category from one .claude directory."""
     settings = load_settings(claude_dir)
     return {
-        "plugins":     collect_plugins_raw(claude_dir, settings),
-        "agents":      collect_agents_raw(claude_dir),
-        "skills":      collect_skills_raw(claude_dir),
-        "commands":    collect_commands(claude_dir),
-        "hooks":       collect_hooks(settings),
+        "plugins": collect_plugins_raw(claude_dir, settings),
+        "agents": collect_agents_raw(claude_dir),
+        "skills": collect_skills_raw(claude_dir),
+        "commands": collect_commands(claude_dir),
+        "hooks": collect_hooks(settings),
         "mcp_servers": collect_mcp_servers_raw(settings),
-        "rules":       collect_rules(claude_dir),
+        "rules": collect_rules(claude_dir),
     }
