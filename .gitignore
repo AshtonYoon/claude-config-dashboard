@@ -16,3 +16,4 @@ build/
 # Runtime hook output
 logs/
 .venv/
+uv.lock
