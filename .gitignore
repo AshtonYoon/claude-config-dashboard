@@ -1,1 +1,17 @@
 .worktrees/
+.claude/
+.playwright-mcp/
+.serena/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# Runtime hook output
+logs/
