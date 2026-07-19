@@ -17,3 +17,8 @@ build/
 logs/
 .venv/
 uv.lock
+
+# Raw screen recordings (may contain personal files captured off-screen) —
+# only the processed clips under docs/assets/ are meant to be shared.
+*.mov
+*.mp4

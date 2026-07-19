@@ -9,9 +9,7 @@ A local web dashboard for everything installed in your `~/.claude` — plugins, 
 
 Unlike config *managers*, this is a deliberately **read-only, zero-dependency** analyzer (Python stdlib, no Node/React/build step): it tells you what your config **costs**. The **Context Tax** tab estimates how many tokens your setup adds to every single session, and — for anything unused for 30+ days — can generate a plain shell script that archives it (`mv`, never `rm`) for you to review and run yourself. The dashboard never touches your filesystem on its own.
 
-<img width="1755" height="899" alt="Claude Config Dashboard screenshot" src="https://github.com/user-attachments/assets/f0332b7b-ad5f-4c2c-b73b-4054d6da2a24" />
-
-<!-- demo GIF goes here: scan → tab switching → project-only diff → click-to-open -->
+![Claude Config Dashboard demo: tab tour, Context Tax token estimate, and cleanup script download](docs/assets/demo.gif)
 
 ## Install & run
 
