@@ -22,3 +22,6 @@ uv.lock
 # only the processed clips under docs/assets/ are meant to be shared.
 *.mov
 *.mp4
+
+# Personal launch-prep notes, not part of the public repo
+docs/launch-drafts.md
