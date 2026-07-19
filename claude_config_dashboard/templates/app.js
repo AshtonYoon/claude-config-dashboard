@@ -46,6 +46,69 @@ function openFile(encodedPath) {
   }).catch(() => {});
 }
 
+function buildCleanupScript(plan) {
+  function q(s) { return String(s).replace(/"/g, '\\"'); }
+  const lines = [
+    '#!/bin/sh',
+    '# Claude Config Dashboard — cleanup plan',
+    '# Generated ' + new Date().toISOString().slice(0, 10),
+    '#',
+    '# This does NOT delete anything — it archives items unused for 30+ days',
+    '# into a dated folder so you can review before removing them for good.',
+    '# Read every line before running. Undo: move files back out of the archive folder.',
+    '',
+    'set -e',
+    'ARCHIVE="' + q(plan.archiveDir) + '"',
+    'mkdir -p "$$ARCHIVE"',
+    '',
+  ];
+  const skipped = [];
+  (plan.items || []).forEach(function(item) {
+    if (item.archiveSource) {
+      lines.push('# ' + item.kind + ': ' + item.name + ' (~' + item.tokens + ' tokens/session)');
+      lines.push('[ -e "' + q(item.archiveSource) + '" ] && mv -n "' + q(item.archiveSource) + '" "$$ARCHIVE/"');
+      lines.push('');
+    } else {
+      skipped.push(item);
+    }
+  });
+  if (skipped.length) {
+    lines.push('# SKIPPED — needs manual review:');
+    skipped.forEach(function(item) {
+      lines.push('#   ' + item.name + ' — ' + item.skipReason);
+    });
+  }
+  return lines.join('\n') + '\n';
+}
+
+function readCleanupPlan() {
+  const el = document.getElementById('cleanup-plan-data');
+  if (!el) return null;
+  try {
+    return JSON.parse(el.dataset.plan);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function downloadCleanupScript() {
+  const plan = readCleanupPlan();
+  if (!plan) return;
+  const blob = new Blob([buildCleanupScript(plan)], {type: 'text/x-sh'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'claude-config-cleanup.sh';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyCleanupScript() {
+  const plan = readCleanupPlan();
+  if (!plan) return;
+  navigator.clipboard.writeText(buildCleanupScript(plan)).catch(() => {});
+}
+
 function stopServer() {
   fetch('/stop', {
     method: 'POST',

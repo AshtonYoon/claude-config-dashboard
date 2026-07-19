@@ -16,6 +16,7 @@ using the common chars ÷ 4 approximation.
 
 import logging
 import math
+from datetime import datetime
 from pathlib import Path
 
 from .collectors import _parse_frontmatter, _skill_content_file
@@ -77,6 +78,23 @@ def _is_stale(last_used: str) -> bool:
     return days is not None and days > STALE_DAYS
 
 
+def _skill_archive_source(s: dict) -> tuple:
+    """What `mv` target archives this skill: its own directory for
+    directory-based skills, the .md file itself for single-file skills.
+    Returns (archive_source_or_None, skip_reason_or_None)."""
+    if s.get("plugin_namespace"):
+        return None, "plugin bundle — remove via /plugin uninstall instead"
+    if s.get("is_symlink"):
+        return None, "symlinked skill — remove the symlink target manually"
+    path = s.get("path", "")
+    if not path:
+        return None, "no source file recorded"
+    p = Path(path)
+    if p.parent.name == s["slug"]:
+        return str(p.parent), None  # directory-based skill: archive the whole folder
+    return str(p), None  # single-file skill: archive the .md file
+
+
 def compute_context_tax(claude_dir: Path, data: dict) -> dict:
     """Build the per-session token cost breakdown from enriched dashboard data."""
     claude_md_items = []
@@ -111,6 +129,7 @@ def compute_context_tax(claude_dir: Path, data: dict) -> dict:
             tokens = _bundle_tokens(s.get("path", ""))
         else:
             tokens = _listing_tokens(s["name"], _full_description(s.get("path", "")))
+        archive_source, skip_reason = _skill_archive_source(s)
         skill_items.append(
             {
                 "name": s["slug"],
@@ -118,18 +137,23 @@ def compute_context_tax(claude_dir: Path, data: dict) -> dict:
                 "tokens": tokens,
                 "kind": "skill",
                 "last_used": s.get("last_used", ""),
+                "archive_source": archive_source,
+                "skip_reason": skip_reason,
             }
         )
 
     agent_items = []
     for a in data["agents"]:
+        path = a.get("path", "")
         agent_items.append(
             {
                 "name": a["slug"],
-                "path": a.get("path", ""),
-                "tokens": _listing_tokens(a["name"], _full_description(a.get("path", ""))),
+                "path": path,
+                "tokens": _listing_tokens(a["name"], _full_description(path)),
                 "kind": "agent",
                 "last_used": a.get("last_used", ""),
+                "archive_source": path or None,
+                "skip_reason": None if path else "no source file recorded",
             }
         )
 
@@ -170,4 +194,6 @@ def compute_context_tax(claude_dir: Path, data: dict) -> dict:
         "categories": result_categories,
         "reclaimable_items": reclaimable,
         "reclaimable_tokens": sum(i["tokens"] for i in reclaimable),
+        "claude_dir": str(claude_dir),
+        "archive_dir": str(claude_dir / "_archive" / datetime.now().strftime("%Y-%m-%d")),
     }

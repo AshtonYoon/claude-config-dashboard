@@ -431,9 +431,30 @@ def render_context_tax(tax: dict) -> str:
                 f"<td>{badge}</td></tr>"
             )
         rows = "".join(reclaim_rows)
+        plan_items = [
+            {
+                "name": i["name"],
+                "kind": i["kind"],
+                "tokens": i["tokens"],
+                "archiveSource": i["archive_source"],
+                "skipReason": i["skip_reason"],
+            }
+            for i in reclaimable
+        ]
+        plan_json = _e(
+            json.dumps(
+                {"archiveDir": tax["archive_dir"], "items": plan_items},
+                separators=(",", ":"),
+            )
+        )
         reclaim_html = f"""<div style="background:rgba(201,100,66,.07);border:1px solid rgba(201,100,66,.18);border-radius:8px;padding:14px 18px;margin-bottom:20px">
   <p style="font-weight:500;color:#c96442;font-size:14px">~{reclaimable_tokens:,} tokens reclaimable</p>
   <p style="font-size:12px;color:#87867f;margin-top:2px">{len(reclaimable)} skills/agents unused for {30}+ days still cost context every session</p>
+  <div id="cleanup-plan-data" data-plan="{plan_json}" style="margin-top:10px;display:flex;gap:8px">
+    <button class="sort-btn" onclick="downloadCleanupScript()">Download cleanup script (.sh)</button>
+    <button class="sort-btn" onclick="copyCleanupScript()">Copy to clipboard</button>
+  </div>
+  <p style="font-size:11px;color:var(--text-t);margin-top:8px">The script only moves files into a dated archive folder — nothing is deleted. Review it before running.</p>
 </div>
 <div style="border-radius:8px;overflow:hidden;margin-bottom:24px">
   <table class="at">

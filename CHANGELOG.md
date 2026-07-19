@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-19
+
+### Added
+- **Cleanup script generator** on the Context Tax tab: for items unused
+  30+ days, generates a reviewable POSIX shell script that archives them
+  (`mv` into a dated `.claude/_archive/<date>/` folder — never `rm`) via
+  "Download cleanup script (.sh)" or "Copy to clipboard". The script is
+  built entirely client-side from data already on the page; no new server
+  endpoint or filesystem-mutation capability was added, so the dashboard
+  remains strictly read-only from the browser's perspective. Plugin-bundled
+  skills and symlinked skills are listed as skipped, with a one-line reason,
+  since they need manual handling (`/plugin uninstall`, symlink target).
+
 ## [1.8.0] - 2026-07-19
 
 ### Added

@@ -7,7 +7,7 @@
 
 A local web dashboard for everything installed in your `~/.claude` — plugins, agents, skills, commands, hooks, MCP servers, and rules — with usage analytics pulled from your session history, and a project-only view that diffs your current project's `.claude` against your home config. Ships as a standalone CLI (PyPI) and as a Claude Code plugin.
 
-Unlike config *managers*, this is a deliberately **read-only, zero-dependency** analyzer (Python stdlib, no Node/React/build step): it tells you what your config **costs**. The **Context Tax** tab estimates how many tokens your setup adds to every single session — and how many you'd get back by removing things you never use.
+Unlike config *managers*, this is a deliberately **read-only, zero-dependency** analyzer (Python stdlib, no Node/React/build step): it tells you what your config **costs**. The **Context Tax** tab estimates how many tokens your setup adds to every single session, and — for anything unused for 30+ days — can generate a plain shell script that archives it (`mv`, never `rm`) for you to review and run yourself. The dashboard never touches your filesystem on its own.
 
 <img width="1755" height="899" alt="Claude Config Dashboard screenshot" src="https://github.com/user-attachments/assets/f0332b7b-ad5f-4c2c-b73b-4054d6da2a24" />
 
@@ -47,7 +47,7 @@ All three open the dashboard at **http://localhost:9876**. Pass `--port` to use 
 | Hooks | Hook scripts by trigger type — click to open script |
 | MCP Servers | Configured MCP servers from settings.json and ~/.claude.json |
 | Rules | Rule files by category — click to open file |
-| Context Tax | Estimated tokens your config adds to every session, per item, plus reclaimable tokens from unused items |
+| Context Tax | Estimated tokens your config adds to every session, per item, plus a downloadable cleanup script (archive-only, review before running) for unused items |
 | Cleanup | Agents, skills, and MCP servers unused for 30+ days |
 | Project-only config | MCP servers, skills, commands, hooks, and rules that exist only in the current project's `.claude` |
 
