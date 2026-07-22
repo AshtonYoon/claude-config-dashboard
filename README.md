@@ -65,6 +65,8 @@ measured from your last 9 sessions (since 2026-05-26)
 
 Same underlying data as the Context Tax and Cleanup tabs, as a single stdout block. In Claude Code, run `/claude-config-dashboard:tax` to get the same thing without leaving the session.
 
+In a real terminal, `--report` colors the token totals and a gradient bar (your config vs. Claude Code's fixed baseline), with the idle counts and verdict colored by severity — auto-detected, so it's plain text when piped, redirected, or `NO_COLOR` is set, and can be forced either way with `--color` / `--no-color`. No new dependency: it's plain 24-bit ANSI codes, stdlib only.
+
 ### statusline: always-on
 
 `claude-config-dashboard --statusline` reads Claude Code's [statusLine](https://docs.claude.com/en/docs/claude-code/statusline) JSON payload from stdin and prints one line: this session's measured start-of-context cost, plus how many installed items sit idle (cached in the system tempdir — never inside `~/.claude` — refreshed at most every 5 minutes, so it stays fast). Add it to `~/.claude/settings.json`:

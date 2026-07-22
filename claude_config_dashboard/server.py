@@ -12,7 +12,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-from . import security
+from . import ansi, security
 from .collectors import scan_dir
 from .context_tax import compute_context_tax
 from .enrich import build_project_only_data, enrich_data
@@ -163,6 +163,9 @@ def main():
     parser.add_argument(
         "--statusline", action="store_true", help="Read Claude Code statusline JSON from stdin, print one line"
     )
+    color_group = parser.add_mutually_exclusive_group()
+    color_group.add_argument("--color", action="store_true", help="Force colored --report output")
+    color_group.add_argument("--no-color", action="store_true", help="Disable colored --report output")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -176,8 +179,10 @@ def main():
         return
 
     if args.report:
+        force_color = True if args.color else (False if args.no_color else None)
+        use_color = ansi.supports_color(force=force_color)
         data, tax = _build_report_data(HOME_CLAUDE)
-        print(build_report(data, tax))
+        print(build_report(data, tax, color=use_color))
         if args.clean:
             if tax["reclaimable_items"]:
                 print()

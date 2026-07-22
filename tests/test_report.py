@@ -69,6 +69,29 @@ class TestBuildReportMeasured:
         assert "not cuttable" in text
         assert "not enough session history" not in text
 
+    def test_color_true_preserves_all_the_same_numbers(self, claude_env):
+        """Enabling color must not corrupt or hide any data -- every figure
+        substring-matched in the plain-text tests must still appear."""
+        data = _enriched(claude_env)
+        tax = context_tax.compute_context_tax(claude_env.claude, data)
+        tax["measured"] = {"median": 46708, "min": 34345, "max": 109104, "count": 9}
+        tax["window_start"] = "2026-05-26T07:54:54.930Z"
+        text = report.build_report(data, tax, color=True)
+
+        assert "\x1b[" in text  # actually emits escape codes
+        assert "46,708" in text
+        assert "34,345-109,104" in text
+        baseline = 46708 - tax["total_tokens"]
+        assert f"{baseline:,}" in text
+        assert f"{tax['total_tokens']:,}" in text
+
+    def test_color_false_is_byte_identical_to_default(self, claude_env):
+        data = _enriched(claude_env)
+        tax = context_tax.compute_context_tax(claude_env.claude, data)
+        tax["measured"] = {"median": 46708, "min": 34345, "max": 109104, "count": 9}
+        assert report.build_report(data, tax, color=False) == report.build_report(data, tax)
+        assert "\x1b[" not in report.build_report(data, tax, color=False)
+
 
 class TestBuildCleanupScript:
     def test_script_has_shebang_and_archive_setup(self, claude_env):

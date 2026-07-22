@@ -30,6 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (extracted from the Cleanup tab's staleness check, now shared by the
   Cleanup tab, Context Tax reclaimable list, `--report`, and `--statusline`
   so "idle" means the same thing everywhere).
+- **Colored `--report` output**: token totals, a gradient bar (your config
+  vs. Claude Code's fixed baseline), idle counts, and the verdict are
+  colored in a real terminal — auto-detected via TTY/`NO_COLOR`/`FORCE_COLOR`
+  (plain text when piped or redirected), overridable with `--color` /
+  `--no-color`. New `claude_config_dashboard.ansi` module: plain 24-bit ANSI
+  escape codes, stdlib only, no new dependency. Every styling call is a
+  no-op when color is off, so `--report`'s plain-text output is unchanged
+  byte-for-byte from before this existed.
 
 ### Why
 The web dashboard is a browse; browsing isn't a habit. The measured data
