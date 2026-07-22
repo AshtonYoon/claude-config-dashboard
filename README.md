@@ -7,7 +7,7 @@
 
 A local web dashboard for everything installed in your `~/.claude` — plugins, agents, skills, commands, hooks, MCP servers, and rules — with usage analytics pulled from your session history, and a project-only view that diffs your current project's `.claude` against your home config. Ships as a standalone CLI (PyPI) and as a Claude Code plugin.
 
-Unlike config *managers*, this is a deliberately **read-only, zero-dependency** analyzer (Python stdlib, no Node/React/build step): it tells you what your config **costs**. The **Context Tax** tab estimates how many tokens your setup adds to every single session, and — for anything unused for 30+ days — can generate a plain shell script that archives it (`mv`, never `rm`) for you to review and run yourself. The dashboard never touches your filesystem on its own.
+Unlike config *managers*, this is a deliberately **read-only, zero-dependency** analyzer (Python stdlib, no Node/React/build step): it tells you what your config **costs**. The **Context Tax** shows the number of tokens *measured* from your own session transcripts that every session starts with **before you type anything** — not a `chars ÷ 4` estimate, so it already includes the system prompt and MCP tool schemas. Alongside it, a home banner surfaces the gap `/context` can't: how many of your installed agents, skills, and MCP servers you've **actually used** (e.g. "77 installed, 4 used"). For anything unused for 30+ days, it can generate a plain shell script that archives it (`mv`, never `rm`) for you to review and run yourself. The dashboard never touches your filesystem on its own.
 
 ![Claude Config Dashboard demo: tab tour, Context Tax token estimate, and cleanup script download](docs/assets/demo.gif)
 

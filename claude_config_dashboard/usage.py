@@ -53,6 +53,35 @@ def list_known_projects(claude_dir: Path) -> list:
     )
 
 
+def _session_start_tokens(entry: dict) -> int:
+    """Measured context size at the first assistant turn of a session.
+
+    Sums cache-creation + cache-read + input tokens from the transcript's usage
+    record. This is what every session pays before the user types anything, and
+    it already includes Claude Code's system prompt and MCP tool schemas — the
+    parts a static char count cannot measure.
+    """
+    usage = entry.get("message", {}).get("usage")
+    if not isinstance(usage, dict):
+        return 0
+    return (
+        usage.get("cache_creation_input_tokens", 0)
+        + usage.get("cache_read_input_tokens", 0)
+        + usage.get("input_tokens", 0)
+    )
+
+
+def _summarize_sessions(starts: list) -> dict:
+    """Return {median, min, max, count} for measured session-start token counts."""
+    if not starts:
+        return {}
+    ordered = sorted(starts)
+    n = len(ordered)
+    mid = n // 2
+    median = ordered[mid] if n % 2 else (ordered[mid - 1] + ordered[mid]) // 2
+    return {"median": median, "min": ordered[0], "max": ordered[-1], "count": n}
+
+
 def _update_stat(bucket: dict, key: str, ts: str) -> None:
     if key not in bucket:
         bucket[key] = {"count": 0, "last_used": ""}
@@ -67,6 +96,8 @@ def collect_usage_stats(claude_dir: Path, project_cwd: str = "*") -> dict:
     project_cwd: "*" for all projects, or an absolute path to scope to one project.
     """
     stats: dict = {"skills": {}, "agents": {}, "mcp": {}}
+    session_starts: list = []  # measured start-of-session context tokens, one per transcript
+    oldest_ts = ""  # earliest timestamp seen — bounds the usage window
 
     if project_cwd == "*":
         patterns = [str(claude_dir / "projects" / "**" / "*.jsonl")]
@@ -81,14 +112,25 @@ def collect_usage_stats(claude_dir: Path, project_cwd: str = "*") -> dict:
 
     for pattern in patterns:
         for path in glob_mod.glob(pattern, recursive=recursive):
+            file_start_ctx = None  # first assistant usage in this transcript
             try:
                 with open(path, errors="replace") as f:
                     for line in f:
                         try:
                             entry = json.loads(line)
+                            ts = entry.get("timestamp", "")
+                            if ts and (not oldest_ts or ts < oldest_ts):
+                                oldest_ts = ts
                             if entry.get("type") != "assistant":
                                 continue
-                            ts = entry.get("timestamp", "")
+                            # Measured session-start cost is only meaningful for real user
+                            # sessions. Subagent transcripts (isSidechain) load a different,
+                            # smaller context and would contaminate the median, so skip them.
+                            if file_start_ctx is None and not entry.get("isSidechain"):
+                                tok = _session_start_tokens(entry)
+                                if tok > 0:
+                                    file_start_ctx = tok
+                                    session_starts.append(tok)
                             for block in entry.get("message", {}).get("content", []):
                                 if not isinstance(block, dict) or block.get("type") != "tool_use":
                                     continue
@@ -128,6 +170,9 @@ def collect_usage_stats(claude_dir: Path, project_cwd: str = "*") -> dict:
                         stats["mcp"][key]["count"] += 1
         except _READ_ERRORS as exc:
             log.debug("unreadable pre_tool_use.json at %s: %s", log_path, exc)
+
+    stats["session_context"] = _summarize_sessions(session_starts)
+    stats["window_start"] = oldest_ts
 
     return stats
 

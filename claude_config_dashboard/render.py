@@ -113,6 +113,50 @@ def _dir_selector(selected_dir: str) -> str:
     )
 
 
+def _home_hero(measured: dict, gaps: list, window_start: str) -> str:
+    """Persistent banner above the tabs: measured session cost + install-vs-used gap.
+
+    gaps is a list of (installed, used, label) tuples.
+    """
+    median = measured.get("median", 0)
+    count = measured.get("count", 0)
+    if not median and not any(installed for installed, _, _ in gaps):
+        return ""
+
+    token_block = ""
+    if median:
+        sess = "session" if count == 1 else "sessions"
+        token_block = (
+            f'<div style="font-family:Georgia,serif;font-size:38px;font-weight:500;color:var(--brand);line-height:1.1">{median:,}</div>'
+            f'<div style="font-size:13px;color:var(--text-s);margin-top:4px">tokens <strong>every session starts with</strong>, before you do any work. '
+            f"Measured from your last {count} {sess}, not estimated. "
+            f'<a onclick="showTab(\'tax\')" class="hover:underline cursor-pointer" style="color:var(--brand)">See the breakdown &rarr;</a></div>'
+        )
+
+    gap_items = []
+    for installed, used, label in gaps:
+        if not installed:
+            continue
+        unused = installed - used
+        unused_html = f' &middot; <span style="color:#b53333">{unused} never used</span>' if unused else ""
+        gap_items.append(
+            f'<div style="font-size:13px;color:var(--text-s)">'
+            f'<strong style="color:var(--text-p)">{used}</strong> / {installed} {_e(label)} used{unused_html}</div>'
+        )
+    gap_block = (
+        '<div style="display:flex;flex-wrap:wrap;gap:18px;margin-top:14px">' + "".join(gap_items) + "</div>"
+        if gap_items
+        else ""
+    )
+
+    window_note = (
+        f'<div style="font-size:11px;color:var(--text-t);margin-top:10px">Usage measured from sessions since {_e(window_start[:10])}.</div>'
+        if window_start
+        else ""
+    )
+    return f'<div class="card" style="padding:22px 24px;margin-bottom:20px">{token_block}{gap_block}{window_note}</div>'
+
+
 # ─── Renderers ────────────────────────────────────────────────────────────────
 
 
@@ -407,9 +451,20 @@ def render_context_tax(tax: dict) -> str:
     categories = tax["categories"]
     reclaimable = tax["reclaimable_items"]
     reclaimable_tokens = tax["reclaimable_tokens"]
+    measured = tax.get("measured") or {}
+    window_start = tax.get("window_start", "")
     max_cat = max((c["tokens"] for c in categories), default=0) or 1
 
-    hero = f"""<div class="card" style="text-align:center;padding:28px 16px;margin-bottom:20px">
+    if measured.get("count"):
+        median, mn, mx, cnt = measured["median"], measured["min"], measured["max"], measured["count"]
+        sess = "session" if cnt == 1 else "sessions"
+        hero = f"""<div class="card" style="text-align:center;padding:28px 16px;margin-bottom:8px">
+  <div style="font-family:Georgia,serif;font-size:44px;font-weight:500;color:var(--brand)">{median:,}</div>
+  <div style="font-size:13px;color:var(--text-s);margin-top:4px">tokens <strong>every session starts with</strong>, before you do any work</div>
+  <div style="font-size:12px;color:var(--text-t);margin-top:6px">measured from your last {cnt} {sess} (range {mn:,}–{mx:,}), not estimated</div>
+</div>"""
+    else:
+        hero = f"""<div class="card" style="text-align:center;padding:28px 16px;margin-bottom:8px">
   <div style="font-family:Georgia,serif;font-size:44px;font-weight:500;color:var(--brand)">~{total:,}</div>
   <div style="font-size:13px;color:var(--text-s);margin-top:4px">estimated tokens added to <strong>every session</strong> by this config</div>
 </div>"""
@@ -473,7 +528,20 @@ def render_context_tax(tax: dict) -> str:
 </div>"""
         for c in categories
     )
-    bars_html = f'<div class="card" style="margin-bottom:24px">{bars}</div>'
+    bars_caption = (
+        '<p style="font-size:12px;color:var(--text-s);margin-bottom:10px">'
+        "Where your own config contributes (static estimate, chars &divide; 4):</p>"
+    )
+    reconcile = ""
+    if measured.get("count"):
+        baseline = max(measured["median"] - total, 0)
+        reconcile = (
+            '<p style="font-size:12px;color:var(--text-s);margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,.06)">'
+            f"Your config is &asymp; <strong>{total:,}</strong> of the measured total. The remaining "
+            f"&asymp; <strong>{baseline:,}</strong> is Claude Code's own baseline (system prompt + MCP tool "
+            "schemas) &mdash; measured, and not yours to cut.</p>"
+        )
+    bars_html = f'<div class="card" style="margin-bottom:24px">{bars_caption}{bars}{reconcile}</div>'
 
     details = []
     for c in categories:
@@ -499,12 +567,24 @@ def render_context_tax(tax: dict) -> str:
   </div>
 </details>""")
 
-    footnote = (
-        '<p style="font-size:11px;color:var(--text-t);margin-top:16px">'
-        "Estimates use chars ÷ 4. CLAUDE.md and rules count full file content; skills, agents, and commands "
-        "count their listing line (name + description) — bodies load only on invocation. "
-        "MCP tool schemas are loaded at runtime and can't be measured statically; hooks add no context cost.</p>"
-    )
+    if measured.get("count"):
+        window_note = f" Usage measured from sessions since {_e(window_start[:10])}." if window_start else ""
+        footnote = (
+            '<p style="font-size:11px;color:var(--text-t);margin-top:16px">'
+            "The headline number is <strong>measured</strong> from your session transcripts "
+            "(cache-creation + cache-read + input tokens at each session's first turn), so it already includes "
+            "Claude Code's system prompt and MCP tool schemas. The breakdown above is a separate static estimate "
+            "(chars &divide; 4) of what your own config files contribute: CLAUDE.md and rules count full file content; "
+            "skills, agents, and commands count their listing line (name + description) — bodies load only on "
+            "invocation; hooks add no context cost." + window_note + "</p>"
+        )
+    else:
+        footnote = (
+            '<p style="font-size:11px;color:var(--text-t);margin-top:16px">'
+            "Estimates use chars ÷ 4. CLAUDE.md and rules count full file content; skills, agents, and commands "
+            "count their listing line (name + description) — bodies load only on invocation. "
+            "MCP tool schemas are loaded at runtime and can't be measured statically; hooks add no context cost.</p>"
+        )
 
     return hero + reclaim_html + bars_html + "".join(details) + footnote
 
@@ -566,7 +646,15 @@ def build_html(data: dict, claude_dir: Path, selected_dir: str) -> str:
             '<p style="font-size:12px;color:var(--text-t);margin-bottom:12px">Click filename to open in default app</p>'
             + f'<div class="grid grid-cols-1 md:grid-cols-2 gap-4">{render_rules(ru)}</div>'
         )
-        project_intro = ""
+        project_intro = _home_hero(
+            data.get("measured") or {},
+            [
+                (len(ag), len(ag) - agents_never, "agents"),
+                (len(sk), len(sk) - skills_never, "skills"),
+                (len(mc), len(mc) - mcp_never, "MCP servers"),
+            ],
+            data.get("window_start", ""),
+        )
 
     dir_sel = _dir_selector(selected_dir)
     nav_stats = (

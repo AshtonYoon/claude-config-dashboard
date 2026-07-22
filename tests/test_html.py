@@ -4,7 +4,7 @@ Asserts stable markers (names, tab ids, security attributes) rather than
 full-page golden strings, so template changes don't break these.
 """
 
-from claude_config_dashboard import collectors, enrich, render, security, usage
+from claude_config_dashboard import collectors, context_tax, enrich, render, security, usage
 
 
 def _home_data(env):
@@ -78,6 +78,31 @@ class TestBuildHtml:
         render.build_html(_home_data(claude_env), claude_env.claude, "home")
         agent_md = str((claude_env.claude / "agents" / "test-runner.md").resolve())
         assert agent_md in security.OPENABLE_PATHS
+
+    def test_measured_context_tax_hero(self, claude_env):
+        data = _home_data(claude_env)
+        data["measured"] = {"median": 44071, "min": 33292, "max": 109104, "count": 9}
+        data["window_start"] = "2026-05-26T07:54:54.930Z"
+        html = render.render_context_tax(context_tax.compute_context_tax(claude_env.claude, data))
+
+        assert "44,071" in html
+        assert "every session starts with" in html
+        assert "measured from your last 9 sessions" in html
+        # the misleading "can't be measured statically" footnote is gone when measured
+        assert "can't be measured statically" not in html
+        assert "sessions since 2026-05-26" in html
+        # hero and static breakdown reconcile: baseline row makes the numbers add up
+        assert "not yours to cut" in html
+
+    def test_home_hero_shows_install_vs_used_gap(self, claude_env):
+        data = _home_data(claude_env)
+        data["measured"] = {"median": 44071, "min": 1, "max": 2, "count": 3}
+        data["window_start"] = "2026-05-26T00:00:00Z"
+        html = render.build_html(data, claude_env.claude, "home")
+
+        assert "44,071" in html
+        assert "agents used" in html
+        assert "never used" in html
 
     def test_html_escapes_descriptions(self, claude_env):
         (claude_env.claude / "agents" / "evil.md").write_text(

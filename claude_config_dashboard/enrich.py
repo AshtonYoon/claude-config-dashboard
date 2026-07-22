@@ -78,6 +78,8 @@ def enrich_data(raw: dict, usage: dict) -> dict:
         "hooks": raw["hooks"],
         "mcp_servers": enrich_mcp(raw["mcp_servers"], usage),
         "rules": raw["rules"],
+        "measured": usage.get("session_context") or {},
+        "window_start": usage.get("window_start", ""),
     }
 
 

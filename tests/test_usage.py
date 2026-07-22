@@ -1,5 +1,6 @@
 """Characterization tests for transcript/log usage parsing and staleness labels."""
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from claude_config_dashboard import usage
@@ -27,7 +28,7 @@ class TestCollectUsageStats:
 
     def test_malformed_lines_and_non_assistant_entries_skipped(self, claude_env):
         stats = usage.collect_usage_stats(claude_env.claude, "*")
-        total = sum(v["count"] for bucket in stats.values() for v in bucket.values())
+        total = sum(v["count"] for name in ("skills", "agents", "mcp") for v in stats[name].values())
         # 2 skill + 1 agent + 1 mcp from alpha, 1 skill from beta,
         # + 2 mcp entries from pre_tool_use.json supplement
         assert total == 7
@@ -55,7 +56,69 @@ class TestCollectUsageStats:
             "skills": {},
             "agents": {},
             "mcp": {},
+            "session_context": {},
+            "window_start": "",
         }
+
+
+class TestMeasuredSessionContext:
+    def test_session_start_tokens_sums_cache_and_input(self):
+        entry = {
+            "message": {
+                "usage": {
+                    "cache_creation_input_tokens": 40000,
+                    "cache_read_input_tokens": 10000,
+                    "input_tokens": 71,
+                }
+            }
+        }
+        assert usage._session_start_tokens(entry) == 50071
+
+    def test_session_start_tokens_missing_usage_is_zero(self):
+        assert usage._session_start_tokens({"message": {}}) == 0
+        assert usage._session_start_tokens({"message": {"usage": None}}) == 0
+
+    def test_summarize_sessions_odd_and_even(self):
+        assert usage._summarize_sessions([30, 10, 50]) == {
+            "median": 30,
+            "min": 10,
+            "max": 50,
+            "count": 3,
+        }
+        # even count: median averages the two middle values
+        assert usage._summarize_sessions([10, 20, 30, 40])["median"] == 25
+
+    def test_summarize_sessions_empty(self):
+        assert usage._summarize_sessions([]) == {}
+
+    def test_sidechain_transcripts_excluded_from_measured(self, tmp_path):
+        proj = tmp_path / "projects" / "p"
+        proj.mkdir(parents=True)
+
+        def _asst(tokens, sidechain):
+            return json.dumps(
+                {
+                    "type": "assistant",
+                    "isSidechain": sidechain,
+                    "timestamp": "2026-06-01T00:00:00.000Z",
+                    "message": {"usage": {"cache_read_input_tokens": tokens}, "content": []},
+                }
+            )
+
+        (proj / "main.jsonl").write_text(_asst(50000, False) + "\n")
+        (proj / "agent-x.jsonl").write_text(_asst(9000, True) + "\n")
+
+        stats = usage.collect_usage_stats(tmp_path, "*")
+        # only the real user session counts toward measured context
+        assert stats["session_context"] == {"median": 50000, "min": 50000, "max": 50000, "count": 1}
+
+    def test_collect_reports_measured_context_and_window(self, claude_env):
+        stats = usage.collect_usage_stats(claude_env.claude, "*")
+        assert "session_context" in stats
+        assert "window_start" in stats
+        # window_start is the earliest transcript timestamp, when any exist
+        if stats["window_start"]:
+            assert stats["window_start"][:4].isdigit()
 
 
 class TestGetCachedUsage:

@@ -196,4 +196,6 @@ def compute_context_tax(claude_dir: Path, data: dict) -> dict:
         "reclaimable_tokens": sum(i["tokens"] for i in reclaimable),
         "claude_dir": str(claude_dir),
         "archive_dir": str(claude_dir / "_archive" / datetime.now().strftime("%Y-%m-%d")),
+        "measured": data.get("measured") or {},
+        "window_start": data.get("window_start", ""),
     }

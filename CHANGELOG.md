@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-07-22
+
+### Added
+- **Measured Context Tax.** The Context Tax hero now shows the *measured*
+  tokens every session starts with — parsed from your own session transcripts
+  (cache-creation + cache-read + input tokens at each session's first turn),
+  not a `chars ÷ 4` estimate. Because it comes from real usage records, this
+  number already includes Claude Code's system prompt and MCP tool schemas —
+  the parts the static estimator explicitly could not measure. The per-category
+  static estimate is kept below as a "where your own config contributes"
+  breakdown, with an explicit "Claude Code baseline (system prompt + MCP
+  schemas), not yours to cut" line so the measured total reconciles with the
+  config estimate. On this maintainer's machine the measured median (~47k) is
+  ~2.7× the old static headline (~17k), which is the point: the old number
+  understated real per-session cost. Subagent (sidechain) transcripts are
+  excluded so they don't contaminate the median.
+- **Home hero band.** A persistent banner above the tabs surfaces the measured
+  session cost plus the install-vs-actually-used gap ("N / M agents used ·
+  K never used") — the answer to "why not just `/context`?": `/context` is a
+  point-in-time snapshot, this is measured across your real session history.
+- **Usage-window disclaimer.** Both the hero band and the Context Tax footnote
+  now state the date the usage window starts from, so "never used" is read as
+  "not used since <date>" rather than an absolute claim.
+
 ## [1.9.0] - 2026-07-19
 
 ### Added
