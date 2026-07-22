@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-07-22
+
+### Added
+- **`--report`**: prints the same measured Context Tax and install-vs-used
+  gap as the dashboard, as a single plain-text verdict, with no HTTP server
+  or browser. Ends with a top-5 "heaviest idle items" list and a one-line
+  verdict ("~65% of your config is dead weight").
+- **`--report --clean`**: additionally prints the archive script for
+  reclaimable items (same `mv -n`-only, review-first plan as the browser's
+  "Download cleanup script" button, ported to Python so both paths produce
+  identical scripts from the same data).
+- **`--statusline`**: reads a Claude Code statusLine JSON payload from
+  stdin and prints one line — this session's measured start-of-context
+  tokens plus how many installed agents/skills/MCP servers sit idle.
+  Session tokens are read from the single transcript named in the payload
+  (fast); the idle count uses a cache in the system tempdir (never inside
+  `~/.claude` — the dashboard still never writes there on its own),
+  refreshed at most every 5 minutes, since a full transcript re-parse on
+  every statusline render would be too slow.
+- **`/claude-config-dashboard:tax`** slash command wraps `--report` so the
+  verdict is available without leaving a Claude Code session.
+- New `claude_config_dashboard.report` module and `usage.is_stale_item`
+  (extracted from the Cleanup tab's staleness check, now shared by the
+  Cleanup tab, Context Tax reclaimable list, `--report`, and `--statusline`
+  so "idle" means the same thing everywhere).
+
+### Why
+The web dashboard is a browse; browsing isn't a habit. The measured data
+(Context Tax) is the part worth seeing repeatedly, so it now also lives as
+a stdout report and an always-on statusline line — the places a Claude Code
+power user already looks, instead of a separate `localhost:9876` tab they
+have to remember to open.
+
 ## [1.10.0] - 2026-07-22
 
 ### Added

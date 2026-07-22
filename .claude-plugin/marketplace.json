@@ -5,14 +5,14 @@
     "email": ""
   },
   "metadata": {
-    "description": "Local web dashboard for ~/.claude config visualization",
-    "version": "1.9.0"
+    "description": "Local web dashboard and CLI for ~/.claude config visualization",
+    "version": "1.11.0"
   },
   "plugins": [
     {
       "name": "claude-config-dashboard",
       "source": "./",
-      "description": "Local web dashboard for ~/.claude config visualization — shows plugins, agents, skills, commands, hooks, and MCP servers"
+      "description": "Local web dashboard and CLI for ~/.claude config visualization — measured per-session token cost, install-vs-used gaps, and a review-first cleanup script for plugins, agents, skills, hooks, and MCP servers"
     }
   ]
 }

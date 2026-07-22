@@ -1,6 +1,7 @@
 """HTTP server: routes, request authorization, and the CLI entry point."""
 
 import argparse
+import json
 import logging
 import os
 import subprocess
@@ -13,10 +14,12 @@ from pathlib import Path
 
 from . import security
 from .collectors import scan_dir
+from .context_tax import compute_context_tax
 from .enrich import build_project_only_data, enrich_data
 from .paths import CHARACTER_IMG, CWD_CLAUDE, HOME_CLAUDE, PORT_DEFAULT
 from .render import build_html
-from .usage import get_cached_usage
+from .report import build_cleanup_script, build_report
+from .usage import get_cached_usage, get_disk_cached_usage, is_stale_item, measure_transcript_start
 
 
 def make_handler(all_data: dict, server_ref: list):
@@ -108,11 +111,58 @@ def make_handler(all_data: dict, server_ref: list):
     return Handler
 
 
+def _build_report_data(claude_dir: Path) -> tuple:
+    raw = scan_dir(claude_dir)
+    stats = get_cached_usage(claude_dir, "*")
+    data = enrich_data(raw, stats)
+    tax = compute_context_tax(claude_dir, data)
+    return data, tax
+
+
+def _run_statusline(claude_dir: Path) -> None:
+    """Print one line for a Claude Code statusLine command: this session's
+    measured start-of-context cost, plus how many installed items sit idle.
+    Reads the statusline JSON payload (with transcript_path) from stdin."""
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+
+    transcript_path = payload.get("transcript_path", "")
+    tokens = measure_transcript_start(transcript_path) if transcript_path else 0
+
+    raw = scan_dir(claude_dir)
+    stats = get_disk_cached_usage(claude_dir)
+    data = enrich_data(raw, stats)
+    idle = sum(
+        1
+        for bucket in (data["agents"], data["skills"], data["mcp_servers"])
+        for item in bucket
+        if is_stale_item(item)
+    )
+
+    parts = []
+    if tokens:
+        parts.append(f"⚙ {tokens // 1000}k start" if tokens >= 1000 else f"⚙ {tokens} start")
+    if idle:
+        parts.append(f"{idle} idle")
+    print(" · ".join(parts) if parts else "⚙ config-tax: no data yet")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Claude Config Dashboard")
     parser.add_argument("--port", type=int, default=PORT_DEFAULT)
     parser.add_argument("--no-open", action="store_true", help="Do not auto-open browser")
     parser.add_argument("--verbose", action="store_true", help="Log skipped/unreadable config files to stderr")
+    parser.add_argument(
+        "--report", action="store_true", help="Print a plain-text verdict to stdout and exit (no server)"
+    )
+    parser.add_argument(
+        "--clean", action="store_true", help="With --report: also print an archive script for idle items"
+    )
+    parser.add_argument(
+        "--statusline", action="store_true", help="Read Claude Code statusline JSON from stdin, print one line"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -120,6 +170,21 @@ def main():
         format="%(levelname)s %(name)s: %(message)s",
         stream=sys.stderr,
     )
+
+    if args.statusline:
+        _run_statusline(HOME_CLAUDE)
+        return
+
+    if args.report:
+        data, tax = _build_report_data(HOME_CLAUDE)
+        print(build_report(data, tax))
+        if args.clean:
+            if tax["reclaimable_items"]:
+                print()
+                print(build_cleanup_script(tax))
+            else:
+                print("\n# Nothing to clean -- no items idle 30+ days.", file=sys.stderr)
+        return
 
     print(f"Scanning {HOME_CLAUDE} ...")
     home_data = scan_dir(HOME_CLAUDE)

@@ -2,8 +2,11 @@
 counts and last-used timestamps, plus staleness labelling."""
 
 import glob as glob_mod
+import hashlib
 import json
 import logging
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +17,8 @@ log = logging.getLogger(__name__)
 _READ_ERRORS = (OSError, ValueError, AttributeError, TypeError)
 
 _usage_cache: dict = {}  # (claude_dir, project_cwd) → stats dict
+
+STALE_DAYS = 30  # threshold shared by the Cleanup tab, Context Tax reclaimable list, and --report
 
 
 def _load_session_map(claude_dir: Path) -> dict:
@@ -69,6 +74,30 @@ def _session_start_tokens(entry: dict) -> int:
         + usage.get("cache_read_input_tokens", 0)
         + usage.get("input_tokens", 0)
     )
+
+
+def measure_transcript_start(path) -> int:
+    """Read a single transcript and return its measured start-of-context tokens, or 0.
+
+    Reads only one file (not the whole projects/ tree), so this is cheap enough
+    to call on every statusline render — unlike collect_usage_stats, which
+    parses every transcript.
+    """
+    try:
+        with open(path, errors="replace") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line)
+                except _READ_ERRORS:
+                    continue
+                if entry.get("type") != "assistant" or entry.get("isSidechain"):
+                    continue
+                tok = _session_start_tokens(entry)
+                if tok > 0:
+                    return tok
+    except OSError as exc:
+        log.debug("cannot read transcript %s: %s", path, exc)
+    return 0
 
 
 def _summarize_sessions(starts: list) -> dict:
@@ -182,6 +211,47 @@ def get_cached_usage(claude_dir: Path, project_cwd: str) -> dict:
     if key not in _usage_cache:
         _usage_cache[key] = collect_usage_stats(claude_dir, project_cwd)
     return _usage_cache[key]
+
+
+def _disk_cache_path(claude_dir: Path) -> Path:
+    # System tempdir, not claude_dir: the dashboard's core promise is that it
+    # never writes into ~/.claude on its own, and a perf cache is not worth
+    # breaking that for. Keyed by claude_dir so multiple configs don't collide.
+    key = hashlib.sha256(str(claude_dir.resolve()).encode()).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / "claude-config-dashboard-cache" / f"usage-{key}.json"
+
+
+def get_disk_cached_usage(claude_dir: Path, ttl_seconds: int = 300) -> dict:
+    """Usage stats cached to disk (in the system tempdir, not ~/.claude),
+    refreshed at most every ttl_seconds.
+
+    Each statusline render is a fresh process, so the in-memory cache above
+    doesn't help there. collect_usage_stats parses every transcript in
+    ~/.claude/projects — too slow to redo on every render — so this persists
+    the result to disk and only recomputes once the cache goes stale.
+    """
+    cache_path = _disk_cache_path(claude_dir)
+    try:
+        if cache_path.exists() and (time.time() - cache_path.stat().st_mtime) < ttl_seconds:
+            return json.loads(cache_path.read_text())
+    except _READ_ERRORS as exc:
+        log.debug("unreadable usage cache at %s: %s", cache_path, exc)
+
+    stats = collect_usage_stats(claude_dir, "*")
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(stats))
+    except OSError as exc:
+        log.debug("cannot write usage cache to %s: %s", cache_path, exc)
+    return stats
+
+
+def is_stale_item(item: dict, stale_days: int = STALE_DAYS) -> bool:
+    """True if item has never been used, or wasn't used within stale_days."""
+    if not item.get("last_used"):
+        return True
+    days, _, _ = _stale_info(item["last_used"])
+    return days is not None and days > stale_days
 
 
 def _stale_info(last_used: str) -> tuple:

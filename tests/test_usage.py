@@ -160,6 +160,100 @@ class TestStaleInfo:
         assert usage._stale_info("not-a-date") == (None, "", "")
 
 
+class TestIsStaleItem:
+    def test_never_used_is_stale(self):
+        assert usage.is_stale_item({"last_used": ""}) is True
+
+    def test_recent_is_not_stale(self):
+        assert usage.is_stale_item({"last_used": _iso(3)}) is False
+
+    def test_old_is_stale(self):
+        assert usage.is_stale_item({"last_used": _iso(45)}) is True
+
+    def test_custom_threshold(self):
+        item = {"last_used": _iso(10)}
+        assert usage.is_stale_item(item, stale_days=30) is False
+        assert usage.is_stale_item(item, stale_days=5) is True
+
+
+class TestMeasureTranscriptStart:
+    def test_reads_first_main_session_usage(self, tmp_path):
+        f = tmp_path / "sess.jsonl"
+        f.write_text(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "isSidechain": False,
+                    "message": {"usage": {"cache_read_input_tokens": 12345}},
+                }
+            )
+            + "\n"
+        )
+        assert usage.measure_transcript_start(f) == 12345
+
+    def test_skips_sidechain_lines(self, tmp_path):
+        f = tmp_path / "sess.jsonl"
+        f.write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "isSidechain": True,
+                            "message": {"usage": {"cache_read_input_tokens": 999}},
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "assistant",
+                            "isSidechain": False,
+                            "message": {"usage": {"cache_read_input_tokens": 5000}},
+                        }
+                    ),
+                ]
+            )
+            + "\n"
+        )
+        assert usage.measure_transcript_start(f) == 5000
+
+    def test_missing_file_is_zero(self, tmp_path):
+        assert usage.measure_transcript_start(tmp_path / "nope.jsonl") == 0
+
+
+class TestDiskCachedUsage:
+    def test_writes_and_reuses_cache(self, claude_env, monkeypatch):
+        calls = []
+        real_collect = usage.collect_usage_stats
+
+        def spy(claude_dir, scope="*"):
+            calls.append(scope)
+            return real_collect(claude_dir, scope)
+
+        monkeypatch.setattr(usage, "collect_usage_stats", spy)
+        first = usage.get_disk_cached_usage(claude_env.claude, ttl_seconds=300)
+        second = usage.get_disk_cached_usage(claude_env.claude, ttl_seconds=300)
+        assert calls == ["*"]  # second call served from disk cache
+        assert first == second
+        assert usage._disk_cache_path(claude_env.claude).exists()
+        # the cache must not live inside ~/.claude -- the dashboard's core
+        # promise is that it never writes there on its own
+        assert claude_env.claude not in usage._disk_cache_path(claude_env.claude).parents
+
+    def test_never_writes_inside_claude_dir(self, claude_env):
+        before = {p for p in claude_env.claude.rglob("*")}
+        usage.get_disk_cached_usage(claude_env.claude, ttl_seconds=300)
+        after = {p for p in claude_env.claude.rglob("*")}
+        assert after == before  # no new files/dirs created under ~/.claude
+
+    def test_recomputes_when_stale(self, claude_env, monkeypatch):
+        calls = []
+        real_collect = usage.collect_usage_stats
+        monkeypatch.setattr(usage, "collect_usage_stats", lambda d, s="*": (calls.append(1), real_collect(d, s))[1])
+        usage.get_disk_cached_usage(claude_env.claude, ttl_seconds=0)
+        usage.get_disk_cached_usage(claude_env.claude, ttl_seconds=0)
+        assert len(calls) == 2  # ttl_seconds=0 forces a recompute every call
+
+
 class TestSessionMap:
     def test_load_session_map(self, claude_env):
         m = usage._load_session_map(claude_env.claude)

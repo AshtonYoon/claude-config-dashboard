@@ -10,7 +10,7 @@ from string import Template
 
 from . import paths, security
 from .context_tax import compute_context_tax
-from .usage import _stale_info
+from .usage import STALE_DAYS, _stale_info, is_stale_item
 
 
 @cache
@@ -385,17 +385,9 @@ def render_rules(rules: list) -> str:
 
 
 def render_cleanup(agents: list, skills: list, mcp_servers: list) -> str:
-    STALE_DAYS = 30
-
-    def is_stale(item: dict) -> bool:
-        if not item.get("last_used"):
-            return True
-        days, _, _ = _stale_info(item["last_used"])
-        return days is not None and days > STALE_DAYS
-
-    stale_agents = [a for a in agents if is_stale(a)]
-    stale_skills = [s for s in skills if is_stale(s)]
-    stale_mcp = [m for m in mcp_servers if is_stale(m)]
+    stale_agents = [a for a in agents if is_stale_item(a)]
+    stale_skills = [s for s in skills if is_stale_item(s)]
+    stale_mcp = [m for m in mcp_servers if is_stale_item(m)]
     total = len(stale_agents) + len(stale_skills) + len(stale_mcp)
 
     if total == 0:

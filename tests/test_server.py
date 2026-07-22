@@ -1,6 +1,8 @@
 """HTTP handler tests: routes and the security regressions for /open and /stop."""
 
 import http.client
+import io
+import json
 import sys
 import threading
 from http.server import HTTPServer
@@ -143,3 +145,41 @@ class TestMain:
         server.main()
         out = capsys.readouterr().out
         assert out.count("Scanning") == 2
+
+    def test_main_report_prints_verdict_and_no_server(self, claude_env, monkeypatch, capsys):
+        monkeypatch.setattr(server, "HOME_CLAUDE", claude_env.claude)
+        monkeypatch.setattr(sys, "argv", ["claude-config-dashboard", "--report"])
+        server.main()
+        out = capsys.readouterr().out
+        assert "Claude Config Report" in out
+        assert "Scanning" not in out
+        assert "Dashboard →" not in out
+
+    def test_main_report_clean_appends_script(self, claude_env, monkeypatch, capsys):
+        monkeypatch.setattr(server, "HOME_CLAUDE", claude_env.claude)
+        monkeypatch.setattr(sys, "argv", ["claude-config-dashboard", "--report", "--clean"])
+        server.main()
+        out = capsys.readouterr().out
+        assert "Claude Config Report" in out
+        assert "#!/bin/sh" in out
+        assert "mv -n" in out
+
+    def test_main_statusline_reads_stdin_and_prints_one_line(self, claude_env, monkeypatch, capsys):
+        monkeypatch.setattr(server, "HOME_CLAUDE", claude_env.claude)
+        payload = json.dumps({"transcript_path": str(claude_env.transcript)})
+        monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
+        monkeypatch.setattr(sys, "argv", ["claude-config-dashboard", "--statusline"])
+        server.main()
+        out = capsys.readouterr().out.strip()
+        assert "\n" not in out  # one line, safe for a statusline
+        # fixture transcripts carry no usage block, so tokens are 0, but idle
+        # items (single-file skill, json-mcp) should still be reported
+        assert "idle" in out
+
+    def test_main_statusline_handles_missing_stdin_gracefully(self, claude_env, monkeypatch, capsys):
+        monkeypatch.setattr(server, "HOME_CLAUDE", claude_env.claude)
+        monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+        monkeypatch.setattr(sys, "argv", ["claude-config-dashboard", "--statusline"])
+        server.main()
+        out = capsys.readouterr().out.strip()
+        assert out  # never blank/crashes even with no payload

@@ -1,13 +1,14 @@
 {
   "name": "claude-config-dashboard",
-  "description": "Local web dashboard for ~/.claude config visualization — shows plugins, agents, skills, commands, hooks, and MCP servers",
-  "version": "1.9.0",
+  "description": "Local web dashboard and CLI for ~/.claude config visualization — measured per-session token cost, install-vs-used gaps, and a review-first cleanup script for plugins, agents, skills, hooks, and MCP servers",
+  "version": "1.11.0",
   "author": {
     "name": "AshtonYoon",
     "url": "https://github.com/AshtonYoon"
   },
   "commands": [
-    "./commands/show.md"
+    "./commands/show.md",
+    "./commands/tax.md"
   ],
   "homepage": "https://github.com/AshtonYoon/claude-config-dashboard",
   "repository": "https://github.com/AshtonYoon/claude-config-dashboard",
